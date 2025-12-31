@@ -147,7 +147,9 @@ def beta_to_sigma(w, beta):
         
         if condition_satisfied:
             sigma.add(i)
-    
+
+    # Assert that sigma is decreasing (w is decreasing on sigma)
+    assert is_decreasing_on_subset(w, sigma), f"Sigma {sigma} is not decreasing on w={w}"
     return sigma
 
 
@@ -220,17 +222,21 @@ def sigma_to_beta(w, sigma):
         for j in range(1, i):
             if w[j-1] < w[i-1]:
                 beta.add(j)
-    
+
+    # Assert that beta satisfies the beta condition
+    assert is_beta_on_subset(w, beta), f"Beta {beta} does not satisfy the beta condition on w={w}"
     return beta
 
 
-def print_all_w_sigma_pairs(n):
+
+def print_all_w_sigma_pairs(n, verbose=1):
     """
     Generate and print all (w, sigma) pairs for permutations of size n.
     Also prints the mapping sigma -> beta -> sigma and verifies if they're equal.
     
     Args:
         n: The size of the permutation
+        verbose: Verbosity level (0=minimal, 1=normal, 2=detailed)
     """
     count = 0
     mismatch_count = 0
@@ -250,9 +256,12 @@ def print_all_w_sigma_pairs(n):
         
         if not is_equal:
             mismatch_count += 1
-        print(f"{count}: σ={str_colored_partition(w, sigma)} β={str_colored_partition(w, beta)}")
-        if not is_equal:
-            print(f"   WARNING: σ ≠ σ' for permutation {w}")
+        
+        # Only print sigma and beta details if verbose level is high enough
+        if verbose >= 2:
+            print(f"{count}: (w,σ)={str_colored_partition(w, sigma)} (w,β)={str_colored_partition(w, beta)}")
+            if not is_equal:
+                print(f"   WARNING: σ ≠ σ' for permutation {w}")
     
     print(f"Total pairs: {count}")
     print(f"Mismatches: {mismatch_count}")
@@ -262,13 +271,14 @@ def print_all_w_sigma_pairs(n):
     else:
         print(f"✗ Found {mismatch_count} mismatches where σ ≠ σ'")
 
-def verify_sigma_beta_equality(n):
+def verify_sigma_beta_equality(n, verbose=1):
     """
     Verify that for each permutation w of size n, the number of valid sigma
     equals the number of valid beta.
     
     Args:
         n: The size of the permutation
+        verbose: Verbosity level (0=minimal, 1=normal, 2=detailed)
     
     Returns:
         True if all permutations satisfy the equality, False otherwise
@@ -283,17 +293,20 @@ def verify_sigma_beta_equality(n):
         beta_count = sum(1 for _ in generate_all_beta(w))
         
         if sigma_count != beta_count:
-            print(f"Mismatch found for permutation {w}:")
-            print(f"  Sigma count: {sigma_count}")
-            print(f"  Beta count: {beta_count}")
+            if verbose >= 1:
+                print(f"Mismatch found for permutation {w}:")
+                print(f"  Sigma count: {sigma_count}")
+                print(f"  Beta count: {beta_count}")
             all_equal = False
         else:
-            print(f"Permutation {w}: σ={sigma_count}, β={beta_count} ✓")
+            if verbose >= 2:
+                print(f"Permutation {w}: σ={sigma_count}, β={beta_count} ✓")
     
-    if all_equal:
-        print(f"\n✓ Verification passed: All permutations of size {n} have equal sigma and beta counts")
-    else:
-        print(f"\n✗ Verification failed: Some permutations have unequal counts")
+    if verbose >= 1:
+        if all_equal:
+            print(f"\n✓ Verification passed: All permutations of size {n} have equal sigma and beta counts")
+        else:
+            print(f"\n✗ Verification failed: Some permutations have unequal counts")
     
     return all_equal
 
@@ -308,7 +321,13 @@ if __name__ == "__main__":
     else:
         n = 4
     
-    # Verify that for each permutation w, the number of valid sigma equals the number of valid beta
-    verify_sigma_beta_equality(n)
+    # Read verbose level from command line, default to 1 if no parameter provided
+    if len(sys.argv) > 2:
+        verbose = int(sys.argv[2])
+    else:
+        verbose = 1
     
-    print_all_w_sigma_pairs(n)
+    # Verify that for each permutation w, the number of valid sigma equals the number of valid beta
+    verify_sigma_beta_equality(n, verbose)
+    
+    print_all_w_sigma_pairs(n, verbose)
