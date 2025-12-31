@@ -1,0 +1,659 @@
+from itertools import combinations, permutations
+from math import comb, factorial
+from typing import Set, Tuple, List
+from enum import Enum
+
+
+
+def generate_R(m, n):
+    """
+    Generate all rook boards (partial matchings) between two sets.
+    A rook board is a set of pairs (i,j) where:
+    - i ∈ [1..m] and j ∈ [1..n]
+    - each i appears at most once
+    - each j appears at most once
+    
+    This generates all possible rook boards, including the empty board.
+    
+    Args:
+        m: Size of the first set (i in range [1, m])
+        n: Size of the second set (j in range [1, n])
+    
+    Yields:
+        Each rook board as a set of tuples (i, j)
+    """
+    
+    # Generate empty rook board
+    yield set()
+    
+    # For each k from 1 to min(m, n)
+    for k in range(1, min(m, n) + 1):
+        # Take k elements from m
+        for m_subset in combinations(range(1, m + 1), k):
+            # Take k elements from n
+            for n_subset in combinations(range(1, n + 1), k):
+                # Generate all permutations of the k elements in n
+                for n_perm in permutations(n_subset):
+                    # Pair elements in m with elements in n
+                    matching = set(zip(m_subset, n_perm))
+                    yield matching
+
+
+
+def count_R(m, n):
+    """
+    Directly compute the number of all rook boards (partial matchings) between two sets.
+    
+    The formula is based on the permanent of a matrix, but can be computed more efficiently.
+    For rook boards, we sum over all possible matching sizes k:
+    - For each k from 0 to min(m, n):
+      - Choose k elements from m: C(m, k)
+      - Choose k elements from n: C(n, k)
+      - Match them in all possible ways: k!
+    
+    Total count = Σ(k=0 to min(m,n)) C(m,k) * C(n,k) * k!
+    
+    Args:
+        m: Size of the second set (j in range [1, m])
+        n: Size of the first set (i in range [1, n])
+    
+    Returns:
+        The total number of rook boards
+    """
+    
+    total = 0
+    for k in range(0, min(m, n) + 1):
+        # C(m, k) * C(n, k) * k!
+        count = comb(m, k) * comb(n, k) * factorial(k)
+        total += count
+    return total
+
+
+def maze_to_rook_board(grid):
+    """
+    Convert a maze grid back to a rook board by extracting positions of 'N' entries.
+    The inverse operation of generate_maze.
+    
+    Args:
+        grid: A 2D list (matrix) representing the maze
+    
+    Returns:
+        A set of tuples (i, j) representing the rook board (1-indexed)
+    """
+    if not grid:
+        return set()
+    
+    m = len(grid)
+    n = len(grid[0]) if m > 0 else 0
+    
+    rook_board = set()
+    
+    # Scan through the grid and find all 'N' entries
+    for i in range(m):
+        for j in range(n):
+            if grid[i][j] == 'N':
+                # Convert to 1-indexed coordinates
+                rook_board.add((i + 1, j + 1))
+    
+    return rook_board
+
+
+def generate_maze(m, n, rook_board):
+    # Define a function to compute the NW envelope which is the union of all indices (i,j) 
+    # such that there exists (a,b) in X with i<=a and j<=b
+    def compute_nw_envelope(X):
+        """
+        Compute the Northwest envelope of a rook board as a matrix.
+        The NW envelope is represented as a (m+2) x (n+2) matrix where
+        each cell contains 1 if the position (i,j) is in the envelope, 0 otherwise.
+        A position (i,j) is in the envelope if there exists at least one rook 
+        at position (a,b) in X where i <= a and j <= b.
+        
+        Args:
+            X: Set of rook positions (tuples of (row, col))
+            m: Number of rows in the grid
+            n: Number of columns in the grid
+        
+        Returns:
+            List of lists (matrix) where envelope[i][j] = 1 if (i,j) is in the envelope, 0 otherwise
+            Matrix dimensions are (m+2) x (n+2) with 0-based indexing
+        """
+        # Initialize (m+2) x (n+2) matrix with zeros
+        nw_envelope = [[0 for _ in range(n + 2)] for _ in range(m + 2)]
+        
+        # For each position (i,j) in the grid (using 1-based indexing)
+        for i in range(1, m + 2):
+            for j in range(1, n + 2):
+                # Check if there exists any rook (a,b) in X such that i <= a and j <= b
+                for a, b in X:
+                    if i <= a and j <= b:
+                        nw_envelope[i][j] = 1
+                        break  # Found at least one, no need to check further
+        
+        return nw_envelope
+
+    def remove_boundary_points(X, nw_envelope):
+        """
+        Remove boundary points from the augmented rook board.
+        Non-boundary points (i,j) are those (i+1,j), (i+1,j+1) and (i,j+1) are all marked by 1  
+         
+        Args:
+            X: Set of rook positions (tuples of (row, col)) including boundary points
+            nw_envelope: The Northwest envelope matrix computed from X
+            m: Number of rows in the original grid
+            n: Number of columns in the original grid
+        
+        Returns:
+            A new set containing only the non-boundary rook positions
+        """
+        non_boundary = set()
+        
+        for i, j in X:
+            # Check if (i,j) is a non-boundary point
+            # A point is non-boundary if (i+1,j), (i+1,j+1), and (i,j+1) are all in the envelope
+            # Make sure indices are within bounds
+
+            # Check if all three adjacent positions exist and are in the envelope
+            # If a position doesn't exist, we don't check it
+            check_right = j + 1 < n + 2
+            check_down = i + 1 < m + 2
+            check_diagonal = check_right and check_down
+            
+            # Determine if this is a non-boundary point
+            is_non_boundary = True
+            
+            # Check (i+1, j) if it exists
+            if check_down and nw_envelope[i + 1][j] != 1:
+                is_non_boundary = False
+            
+            # Check (i, j+1) if it exists
+            if check_right and nw_envelope[i][j + 1] != 1:
+                is_non_boundary = False
+            
+            # Check (i+1, j+1) if it exists
+            if check_diagonal and nw_envelope[i + 1][j + 1] != 1:
+                is_non_boundary = False
+            
+            if is_non_boundary:
+                non_boundary.add((i, j))
+        
+        return non_boundary
+
+
+    def determine_cell_type(grid, i, j):
+        """
+        Determine the type of entry at position (i, j) in the maze grid.
+
+        Cell types are defined as follows:
+        - 'N' (NW corner): grid[i+1][j] = grid[i][j]-1 and grid[i][j+1] = grid[i][j]-1
+        - 'S' (SE corner): grid[i+1][j+1] = grid[i][j]-1 and grid[i][j+1] = grid[i+1][j] = grid[i][j]
+        - 'H' (Horizontal edge -): grid[i+1][j] = grid[i][j]-1 and grid[i][j+1] = grid[i][j]
+        - 'V' (Vertical edge |): grid[i][j+1] = grid[i][j]-1 and grid[i+1][j] = grid[i][j]
+
+        Args:
+            grid: A 2D list (matrix) representing the maze
+            i: Row index (0-based)
+            j: Column index (0-based)
+
+        Returns:
+            A character ('N', 'S', 'H', 'V', or ' ') indicating the type of the cell
+        """
+        m = len(grid)
+        n = len(grid[0]) if m > 0 else 0
+
+        # Check bounds - if any adjacent cell is out of bounds, return space
+
+        current = grid[i][j]
+        down = grid[i + 1][j] if i+1 < m else grid[i][j]-1
+        right = grid[i][j + 1] if j+1 < n else grid[i][j]-1
+        diagonal = grid[i + 1][j + 1] if i+1<m and j+1<n else grid[i][j]-1
+
+        # Check for NW corner: both down and right are current-1
+        if down == current - 1 and right == current - 1:
+            return 'N'
+
+        # Check for SE corner: diagonal is current-1, and both down and right equal current
+        if diagonal == current - 1 and down == current and right == current:
+            return 'S'
+
+        # Check for Horizontal edge: down is current-1, right equals current
+        if down == current - 1 and right == current:
+            return 'H'
+
+        # Check for Vertical edge: right is current-1, down equals current
+        if right == current - 1 and down == current:
+            return 'V'
+
+        # Default case: empty space
+        return ' '
+
+    # Step 1: Augment the rook set X1
+    # X stores coordinates as (row, col) using 1-based indexing from the text
+    X = set(rook_board)
+    
+    # Initialize (m+2) x (n+2) grid with empty strings
+    # indices are 0..m+1 and 0..n+1
+    grid = [[0 for _ in range(n+2)] for _ in range(m+2)]
+
+    # Fill the augmented M+1 row and N+1 column
+    cols_with_rooks = {c for r, c in X}
+    for c in range(1, n + 1):
+        if c not in cols_with_rooks:
+            X.add((m + 1, c))
+    rows_with_rooks = {r for r, c in X}
+    for r in range(1, m + 1):
+        if r not in rows_with_rooks:
+            X.add((r, n + 1))
+
+
+    def add_nw_env_to_grid(nw_env):
+        """
+        Add the Northwest envelope to the grid.
+        For each position (i,j) in the envelope, mark it in the grid.
+        
+        Args:
+            grid: The (m+2) x (n+2) grid to be modified
+            nw_env: The Northwest envelope matrix
+            m: Number of rows in the original grid
+            n: Number of columns in the original grid
+        """
+        for i in range(m + 2):
+            for j in range(n + 2):
+                grid[i][j] += nw_env[i][j] 
+
+    while X : 
+        # Compute the NW envelope
+        nw_env = compute_nw_envelope(X)
+        add_nw_env_to_grid(nw_env)
+        X = remove_boundary_points(X, nw_env)
+
+
+    # Only take the 1..m, 1..n parts of the grid and return
+    result=[]
+    for i in range(1, m + 1):
+        row = [determine_cell_type(grid, i, j) for j in range(1,n+1)] 
+        result.append(row)
+
+    # Check that all 'N' entries in the result correspond to elements in the original rook_board
+    RB = maze_to_rook_board(result)
+    assert RB == set(rook_board)
+    return result
+
+
+def maze_involution(grid):
+    """
+    Apply the involution on a maze by reversing the grid and swapping 'S' with 'N'.
+    The involution maps grid[i][j] to grid[-i-1][-j-1] and changes 'S' to 'N' and vice versa.
+    
+    Args:
+        grid: A 2D list (matrix) representing the maze
+    
+    Returns:
+        A new 2D list representing the involution of the maze
+    """
+    if not grid:
+        return []
+    
+    m = len(grid)
+    n = len(grid[0]) if m > 0 else 0
+    
+    # Create a new grid with reversed indices
+    result = [['' for _ in range(n)] for _ in range(m)]
+    
+    for i in range(m):
+        for j in range(n):
+            # Map grid[i][j] to result[m-1-i][n-1-j]
+            cell = grid[i][j]
+            
+            # Swap 'S' and 'N'
+            if cell == 'S':
+                result[m-1-i][n-1-j] = 'N'
+            elif cell == 'N':
+                result[m-1-i][n-1-j] = 'S'
+            else:
+                result[m-1-i][n-1-j] = cell
+    return result
+
+
+
+def str_maze(grid):
+    """
+    Convert the maze grid to a string representation.
+    Output the maze using the numbers in the grid directly.
+    
+    Args:
+        grid: A 2D list (matrix) representing the maze
+    
+    Returns:
+        A string representation of the maze
+    """
+    if not grid:
+        return "Empty grid\n"
+    
+    m = len(grid)
+    n = len(grid[0]) if m > 0 else 0
+    
+    # ANSI escape code for blue color
+    BLUE = '\033[94m'
+    RESET = '\033[0m'
+    
+    lines = []
+    # Build each row with numbers from the grid
+    for i in range(m):
+        row_str = ""
+        for j in range(n):
+            if grid[i][j] == 'N':
+                row_str += f"{BLUE}{grid[i][j]}{RESET} "
+            else:
+                row_str += f"{grid[i][j]} "
+        lines.append(row_str.rstrip())
+    
+    return "\n".join(lines) 
+
+
+def print_maze(grid):
+    """
+    Print the maze grid in a readable format.
+    Output the maze using the numbers in the grid directly.
+    
+    Args:
+        grid: A 2D list (matrix) representing the maze
+    """
+    print(str_maze(grid), end="")
+
+
+
+
+
+def str_maze_by_type(grid):
+    """
+    Convert the maze grid to a string representation using cell type symbols.
+    
+    Args:
+        grid: A 2D list (matrix) representing the maze
+    
+    Returns:
+        A string representation of the maze with box-drawing characters
+    """
+    if not grid:
+        return "Empty grid\n"
+    
+    m = len(grid)
+    n = len(grid[0]) if m > 0 else 0
+    
+    # Mapping from cell type to box-drawing character
+    symbol_map = {
+        'S': '┌',
+        'N': '┘',
+        'H': '─',
+        'V': '│',
+        ' ': ' '
+    }
+    
+    # ANSI escape code for blue color
+    BLUE = '\033[94m'
+    RESET = '\033[0m'
+    
+    lines = []
+    # Build each row with box-drawing symbols
+    for i in range(m):
+        row_str = ""
+        for j in range(n):
+            if grid[i][j] == 'N':
+                row_str += f"{BLUE}{symbol_map[grid[i][j]]}{RESET}"
+            else:
+                row_str += symbol_map[grid[i][j]]
+        lines.append(row_str)
+    
+    return "\n".join(lines) + "\n"
+
+
+def print_maze_by_type(grid):
+    """
+    Print the maze using cell type symbols.
+    
+    Args:
+        grid: A 2D list (matrix) representing the maze
+    """
+    print(str_maze_by_type(grid), end="")
+
+
+def concat_str_blocks(str1, str2, separator="  "):
+    """
+    Concatenate two blocks of strings side by side.
+    This is used to print two mazes side by side for comparison.
+    
+    Args:
+        str1: First string block (can contain multiple lines)
+        str2: Second string block (can contain multiple lines)
+        separator: String to separate the two blocks (default: "  ")
+    
+    Returns:
+        A string with both blocks concatenated line by line
+    """
+    lines1 = str1.split('\n')
+    lines2 = str2.split('\n')
+    
+    # Ensure both have the same number of lines by padding with empty strings
+    max_lines = max(len(lines1), len(lines2))
+    while len(lines1) < max_lines:
+        lines1.append('')
+    while len(lines2) < max_lines:
+        lines2.append('')
+    
+    # Find the maximum width of lines in the first block
+    max_width1 = max(len(line) for line in lines1) if lines1 else 0
+    
+    # Concatenate line by line
+    result_lines = []
+    for line1, line2 in zip(lines1, lines2):
+        # Pad the first line to align the separator
+        padded_line1 = line1.ljust(max_width1)
+        result_lines.append(f"{padded_line1}{separator}{line2}")
+    
+    return '\n'.join(result_lines)
+
+
+
+def concat_str_blocks_list(str_list, separator="  "):
+    """
+    Concatenate a list of string blocks side by side.
+    Each block can contain multiple lines separated by newlines.
+    
+    Args:
+        str_list: A list of string blocks to concatenate
+        separator: String to separate the blocks (default: "  ")
+    
+    Returns:
+        A string with all blocks concatenated line by line
+    """
+    import re
+    
+    def visible_length(s):
+        """Calculate the visible length of a string, excluding ANSI escape codes."""
+        # Remove ANSI escape sequences
+        ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+        return len(ansi_escape.sub('', s))
+    
+    if not str_list:
+        return ""
+    
+    # Split each block into lines
+    all_lines = [block.split('\n') for block in str_list]
+    
+    # Find the maximum number of lines across all blocks
+    max_lines = max(len(lines) for lines in all_lines)
+    
+    # Pad each block to have the same number of lines
+    for lines in all_lines:
+        while len(lines) < max_lines:
+            lines.append('')
+    
+    # Find the maximum visible width for each block
+    max_widths = []
+    for lines in all_lines:
+        max_width = max(visible_length(line) for line in lines) if lines else 0
+        max_widths.append(max_width)
+    
+    # Concatenate line by line
+    result_lines = []
+    for line_idx in range(max_lines):
+        result_line = ""
+        for block_idx, lines in enumerate(all_lines):
+            line = lines[line_idx]
+            
+            # Pad all blocks except the last one
+            if block_idx < len(all_lines) - 1:
+                visible_len = visible_length(line)
+                padding_needed = max_widths[block_idx] - visible_len
+                padded_line = line + ' ' * padding_needed + separator
+                result_line += padded_line
+            else:
+                result_line += line
+        
+        result_lines.append(result_line)
+    
+    return '\n'.join(result_lines) + '\n'
+
+
+def check_R_count(m, n):
+    """
+    Verify that the generate_R function produces the correct number
+    of rook boards by comparing the actual count with the theoretical count.
+    
+    Args:
+        m: Size of the second set (j in range [1, m])
+        n: Size of the first set (i in range [1, n])
+    
+    Returns:
+        A tuple (generated_count, expected_count, is_correct) where:
+        - generated_count: actual number of rook boards generated
+        - expected_count: theoretical number computed by count_R
+        - is_correct: True if counts match, False otherwise
+    """
+    
+    # Generate all rook boards and count them
+    generated_count = sum(1 for _ in generate_R(m, n))
+    
+    # Compute expected count using the formula
+    expected_count = count_R(m, n)
+    
+    # Check if they match
+    is_correct = (generated_count == expected_count)
+    
+    return generated_count, expected_count, is_correct
+
+
+def format_R(rook_board):
+    """
+    Format a rook board for printing by sorting pairs by their first element.
+    
+    Args:
+        rook_board: A set of tuples (i, j) representing a rook board
+    
+    Returns:
+        A string representation with pairs sorted by i (first element)
+    """
+    sorted_pairs = sorted(rook_board, key=lambda pair: pair[0])
+    return str(sorted_pairs)
+
+
+
+def reverse_pair(rook_board):
+    """
+    Reverse the pairs in a rook board by swapping the row and column indices.
+    This operation transposes the rook board, converting (i, j) pairs to (j, i) pairs.
+    
+    Args:
+        rook_board: A set of tuples (i, j) representing a rook board
+    
+    Returns:
+        A new set of tuples with reversed pairs (j, i)
+    """
+    return {(j, i) for i, j in rook_board}
+
+def Fourier(rook_board,m,n):
+    """
+    Apply the Fourier transform to a rook board.
+    
+    Args:
+        rook_board: A set of tuples (i, j) representing a rook board
+        m: Size of the second set (j in range [1, m])
+        n: Size of the first set (i in range [1, n])
+    
+    Returns:
+        A new set of tuples representing the Fourier transform of the rook board
+    """
+    maze = generate_maze(m, n, rook_board)
+    invmaze = maze_involution(maze)
+    res = maze_to_rook_board(invmaze)
+    res = reverse_pair(res)
+    return res
+
+def print_all_R(m, n):
+    """
+    Print all rook boards (partial matchings) between two sets.
+    
+    Args:
+        m: Size of the second set (j in range [1, m])
+        n: Size of the first set (i in range [1, n])
+    
+    Returns:
+        The total number of rook boards printed
+    """
+    count = 0
+    print(f"All rook boards for m={m}, n={n}:")
+    print("-" * 80)
+    
+    for rook_board in generate_R(m, n):
+        count += 1
+        maze = generate_maze(m, n, rook_board)
+        strblocks = []
+        strblocks.append(str_maze(maze))
+        strblocks.append(str_maze_by_type(maze))
+        invmaze = maze_involution(maze)
+        strblocks.append(str_maze_by_type(invmaze))
+        strblocks.append(str_maze(invmaze))
+        fourier = reverse_pair(maze_to_rook_board(invmaze))
+        print(f"{count}. {format_R(rook_board)} --> {format_R(fourier)}")
+        print(concat_str_blocks_list(strblocks))
+    
+    print("-" * 80)
+    print(f"Total: {count} rook boards")
+    
+    # Verify the count is correct
+    expected_count = count_R(m, n)
+    if count == expected_count:
+        print(f"✓ Count verification: PASSED ({count} == {expected_count})")
+    else:
+        print(f"✗ Count verification: FAILED ({count} != {expected_count})")
+    
+    return count
+
+
+
+
+
+if __name__ == "__main__":
+    import sys
+    
+    # Check if command line arguments are provided
+    if len(sys.argv) != 3:
+        print("Usage: python Maze.py <m> <n>")
+        print("  m: Size of the second set")
+        print("  n: Size of the first set")
+        sys.exit(1)
+    
+    try:
+        m = int(sys.argv[1])
+        n = int(sys.argv[2])
+        
+        if m <= 0 or n <= 0:
+            print("Error: Both m and n must be positive integers")
+            sys.exit(1)
+        print_all_R(m, n) 
+        
+    except ValueError:
+        print("Error: Both m and n must be valid integers")
+        sys.exit(1)
+
