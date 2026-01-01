@@ -363,6 +363,34 @@ def print_maze(grid):
 
 
 
+def str_colored_partition(w, I):
+    """
+    Generate colored partition string for a permutation w.
+    Elements at positions in I are colored blue, others are colored red.
+    
+    Args:
+        w: A permutation (tuple or list)
+        I: A set of positions to color blue (1-indexed)
+    
+    Returns:
+        A string with ANSI color codes showing the colored partition
+    """
+    # ANSI color codes
+    BLUE = '\033[94m'
+    RED = '\033[91m'
+    RESET = '\033[0m'
+    
+    n = len(w)
+    result = []
+    
+    for i in range(1, n + 1):
+        if i in I:
+            result.append(f"{BLUE}{w[i-1]}{RESET}")
+        else:
+            result.append(f"{RED}{w[i-1]}{RESET}")
+    
+    return f"[{', '.join(result)}]"
+
 
 
 def str_maze_by_type(grid):
@@ -598,6 +626,276 @@ def Fourier(rook_board,m,n):
     res = reverse_pair(res)
     return res
 
+
+def size_of_maze(maze):
+    m = len(maze)
+    n = len(maze[0]) if m > 0 else 0
+    return m, n
+
+def trace_wall(maze,i,j):
+    """
+    Trace all possible paths in a maze starting from a given cell.
+    
+    Args:
+        maze: A 2D list (matrix) representing the maze
+        i: Starting row index
+        j: Starting column index
+    
+    Returns:
+        A set of tuples of the points in the wall 
+    """
+    m, n = size_of_maze(maze)
+    res = []
+    while j>=0 and i<m: 
+        res.append((i,j,maze[i][j]))
+        if maze[i][j] in ['S','H']:
+            j = j-1
+        elif maze[i][j] in ['N','V']:
+            i = i+1
+        else: 
+            break    
+    return res
+
+
+def graph_to_matching(X,n=None):
+    """
+    Convert a graph (edge set) to a matching (edge set) by selecting one edge per vertex.
+    
+    Args:
+        X: A set of tuples (i, j) representing the graph edges
+        n: Number of vertices in the graph
+    
+    Returns:
+        A set of tuples (i, j) representing the matching edges
+    """
+    assert X, "X must be non-empty."
+    if not n:
+        n = max(i for i,j in X)
+    w = [0  for _ in range(n)]
+    for i,j in X:
+        w[i-1] = j
+    return w
+
+def matching_to_graph(w):
+    G = set( (i+1, w[i]) for i in range(len(w)))
+    return G
+
+
+def maze_to_RB(maze):
+    """
+    Convert a maze grid to a rook board by extracting positions of 'S' entries.
+    Only works for square mazes where m == n.
+    
+    Args:
+        maze: A 2D list (matrix) representing the maze
+    
+    Returns:
+        A set of tuples (i, j) representing the rook board (1-indexed)
+   
+    Raises:
+        ValueError: If the maze is not square (m != n)
+    """
+    if not maze:
+        return set(),set()
+    
+    m = len(maze)
+    n = len(maze[0]) if m > 0 else 0
+
+    # Check if the maze is square
+    if m != n:
+        raise ValueError(f"Maze must be square, but got m={m}, n={n}")
+    res = set() 
+    beta = set() 
+    for j in range(n):
+        path = trace_wall(maze,0,j)
+        if path and path[0][2] in ['V','S']:
+            for i,j,t  in path:
+                if t == 'S':
+                    res.add((i+1,j+1))
+                    beta.add(j+1)
+    for i in range(m):
+        path = trace_wall(maze,i,n-1)
+        if path and path[0][2] in ['H','N']:
+            for i,j,t  in path:
+                if t == 'N':
+                    res.add((i+1,j+1))
+    res = graph_to_matching(res)
+    return (res,beta)
+
+
+    
+def RB_to_maze(w,beta,m,n):
+    def compute_nw_envelope(X):
+        """
+        Compute the Northwest envelope of a rook board as a matrix.
+        The NW envelope is represented as a (m+2) x (n+2) matrix where
+        each cell contains 1 if the position (i,j) is in the envelope, 0 otherwise.
+        A position (i,j) is in the envelope if there exists at least one rook 
+        at position (a,b) in X where i <= a and j <= b.
+        
+        Args:
+            X: Set of rook positions (tuples of (row, col))
+            m: Number of rows in the grid
+            n: Number of columns in the grid
+        
+        Returns:
+            List of lists (matrix) where envelope[i][j] = 1 if (i,j) is in the envelope, 0 otherwise
+            Matrix dimensions are (m+2) x (n+2) with 0-based indexing
+        """
+        # Initialize (m+2) x (n+2) matrix with zeros
+        nw_envelope = [[0 for _ in range(n+2)] for _ in range(m+2)]
+        
+        # For each position (i,j) in the grid (using 1-based indexing)
+        for i in range(0, m + 1):
+            for j in range(0, n + 1):
+                # Check if there exists any rook (a,b) in X such that i <= a and j <= b
+                for a, b in X:
+                    if i <= a and j <= b:
+                        nw_envelope[i][j] = 1
+                        break  # Found at least one, no need to check further
+        return nw_envelope
+
+
+    def determine_nw_edge(grid, i, j):
+        """
+        Determine the type of entry at position (i, j) in the maze grid.
+
+        Cell types are defined as follows:
+        - 'S' (SE corner): grid[i+1][j] = grid[i][j]-1 and grid[i][j+1] = grid[i][j]-1
+        - 'N' (NW corner): grid[i+1][j+1] = grid[i][j]-1 and grid[i][j+1] = grid[i+1][j] = grid[i][j]
+        - 'H' (Horizontal edge -): grid[i+1][j] = grid[i][j]-1 and grid[i][j+1] = grid[i][j]
+        - 'V' (Vertical edge |): grid[i][j+1] = grid[i][j]-1 and grid[i+1][j] = grid[i][j]
+
+        Args:
+            grid: A 2D list (matrix) representing the maze
+            i: Row index 1..m 
+            j: Column index 1..n 
+
+        Returns:
+            A character ('N', 'S', 'H', 'V', or ' ') indicating the type of the cell
+        """
+        assert 0 < i and i <= m, f"Row index i={i} is out of bounds for m={m}"
+        assert 0 < j and j <= n, f"Column index j={j} is out of bounds for n={n}"
+
+        # Check bounds - if any adjacent cell is out of bounds, return space
+        current = grid[i][j]
+        down = grid[i + 1][j] 
+        right = grid[i][j + 1] 
+        diagonal = grid[i + 1][j + 1] 
+        # Check for SE corner: both down and right are current-1
+        if down == current - 1 and right == current - 1:
+            return 'S'
+        # Check for NW corner: diagonal is current-1, and both down and right equal current
+        if diagonal == current - 1 and down == current and right == current:
+            return 'N'
+        # Check for Horizontal edge: down is current-1, right equals current
+        if down == current - 1 and right == current:
+            return 'H'
+        # Check for Vertical edge: right is current-1, down equals current
+        if right == current - 1 and down == current:
+            return 'V'
+        # Default case: empty space
+        return ' '
+
+    def compute_se_envelope(X):
+        """
+        Compute the Southeast envelope of a rook board as a matrix.
+        The SE envelope is represented as a (m+2) x (n+2) matrix where
+        each cell contains 1 if the position (i,j) is in the envelope, 0 otherwise.
+        A position (i,j) is in the envelope if there exists at least one rook 
+        at position (a,b) in X where i >= a and j >= b.
+        
+        Args:
+            X: Set of rook positions (tuples of (row, col))
+            m: Number of rows in the grid
+            n: Number of columns in the grid
+        
+        Returns:
+            List of lists (matrix) where envelope[i][j] = 1 if (i,j) is in the envelope, 0 otherwise
+            Matrix dimensions are (m+2) x (n+2) with 0-based indexing
+        """
+        # Initialize (m+2) x (n+2) matrix with zeros
+        se_envelope = [[0 for _ in range(n+2 )] for _ in range(m+2)]
+        
+        # For each position (i,j) in the grid (using 1-based indexing)
+        for i in range(1, m + 2):
+            for j in range(1, n + 2):
+                # Check if there exists any rook (a,b) in X such that i <= a and j <= b
+                for a, b in X:
+                    if i >= a and j >= b:
+                        se_envelope[i][j] = 1
+                        break  # Found at least one, no need to check further
+        return se_envelope
+
+
+    def determine_se_edge(grid, i, j):
+        """
+        Args:
+            grid: A 2D list (matrix) representing the maze
+            i: Row index 1..m 
+            j: Column index 1..n 
+
+        Returns:
+            A character ('N', 'S', 'H', 'V', or ' ') indicating the type of the cell
+        """
+        assert 0 < i and i <= m, f"Row index i={i} is out of bounds for m={m}"
+        assert 0 < j and j <= n, f"Column index j={j} is out of bounds for n={n}"
+
+        # Check bounds - if any adjacent cell is out of bounds, return space
+        current = grid[i][j]
+        up = grid[i - 1][j] 
+        left = grid[i][j - 1] 
+        diagonal = grid[i - 1][j - 1] 
+        # Check for SE corner: both down and right are current-1
+        if up == current - 1 and left == current - 1:
+            return 'N'
+        # Check for NW corner: diagonal is current-1, and both down and right equal current
+        if diagonal == current - 1 and up == current and left == current:
+            return 'S'
+        # Check for Horizontal edge: down is current-1, right equals current
+        if up == current - 1 and left == current:
+            return 'H'
+        # Check for Vertical edge: right is current-1, down equals current
+        if left == current - 1 and up == current:
+            return 'V'
+        # Default case: empty space
+        return ' '
+
+    # Initialize (m+2) x (n+2) grid with empty strings
+    # indices are 0..m+1 and 0..n+1
+    grid = [[' ' for _ in range(n+2)] for _ in range(m+2)]
+
+    w = matching_to_graph(w)
+
+    # All blue positions
+    XNW = {(i,j) for i,j in w if j in beta}
+    XSE = {(i,j) for i,j in w if not j in beta}
+    while XNW:
+        nw = compute_nw_envelope(XNW)
+        # update grid
+        for i in range(1,m+1):
+            for j in range(1,n+1):
+                c = determine_nw_edge(nw, i, j)
+                if c != ' ':
+                    grid[i][j] = c
+                    # remove element on the boundary 
+                    XNW.discard((i,j))
+                
+    while XSE:
+        se = compute_se_envelope(XSE)
+        # update grid
+        for i in range(1,m+1):
+            for j in range(1,n+1):
+                c = determine_se_edge(se, i, j)
+                if c != ' ':
+                    grid[i][j] = c
+                    # remove element on the boundary 
+                    XSE.discard((i,j))
+    
+    # trim grid to m x n grid. 
+    grid = [row[1:-1] for row in grid[1:-1]]
+    return grid   
+        
 def print_all_R(m, n):
     """
     Print all rook boards (partial matchings) between two sets.
@@ -612,6 +910,8 @@ def print_all_R(m, n):
     count = 0
     print(f"All rook boards/mazes for m={m}, n={n}:")
     print("-" * 80)
+
+    maze_to_RB_test = 0
     
     for rook_board in generate_R(m, n):
         count += 1
@@ -625,6 +925,20 @@ def print_all_R(m, n):
         fourier = reverse_pair(maze_to_rook_board(invmaze))
         print(f"{count}. {format_R(rook_board)} --> {format_R(fourier)}")
         print(concat_str_blocks_list(strblocks))
+
+        # if m=n, test Maze to RB and RB to Maze
+        if m == n:
+            w,beta = maze_to_RB(maze)
+            maze2 = RB_to_maze(w,beta,m,n)
+            print(f"{str_colored_partition(w,beta)}")
+            if maze2 == maze : 
+                print("✓")
+            else:
+                maze_to_RB_test += 1
+                print(f"{str_maze(maze2)}")
+                print(f"{str_maze_by_type(maze2)}")
+                print("✗")
+
     
     print("-" * 80)
     print(f"Total: {count} rook boards")
@@ -635,11 +949,12 @@ def print_all_R(m, n):
         print(f"✓ Count verification: PASSED ({count} == {expected_count})")
     else:
         print(f"✗ Count verification: FAILED ({count} != {expected_count})")
-    
+
+    if maze_to_RB_test > 0:
+        print(f"✗ maze_to_RB test: FAILED ({maze_to_RB_test} cases)")
+    else:
+        print(f"✓ maze_to_RB test: PASSED")
     return count
-
-
-
 
 
 if __name__ == "__main__":
@@ -659,9 +974,9 @@ if __name__ == "__main__":
         if m <= 0 or n <= 0:
             print("Error: Both m and n must be positive integers")
             sys.exit(1)
-        print_all_R(m, n) 
         
     except ValueError:
         print("Error: Both m and n must be valid integers")
         sys.exit(1)
 
+    print_all_R(m, n) 
