@@ -91,7 +91,7 @@ def maze_to_rook_board(grid):
     # Scan through the grid and find all 'N' entries
     for i in range(m):
         for j in range(n):
-            if grid[i][j] == 'N':
+            if grid[i][j] == 'S':
                 # Convert to 1-indexed coordinates
                 rook_board.add((i + 1, j + 1))
     
@@ -185,8 +185,8 @@ def generate_maze(m, n, rook_board):
         Determine the type of entry at position (i, j) in the maze grid.
 
         Cell types are defined as follows:
-        - 'N' (NW corner): grid[i+1][j] = grid[i][j]-1 and grid[i][j+1] = grid[i][j]-1
-        - 'S' (SE corner): grid[i+1][j+1] = grid[i][j]-1 and grid[i][j+1] = grid[i+1][j] = grid[i][j]
+        - 'S' (SE corner): grid[i+1][j] = grid[i][j]-1 and grid[i][j+1] = grid[i][j]-1
+        - 'N' (NW corner): grid[i+1][j+1] = grid[i][j]-1 and grid[i][j+1] = grid[i+1][j] = grid[i][j]
         - 'H' (Horizontal edge -): grid[i+1][j] = grid[i][j]-1 and grid[i][j+1] = grid[i][j]
         - 'V' (Vertical edge |): grid[i][j+1] = grid[i][j]-1 and grid[i+1][j] = grid[i][j]
 
@@ -208,13 +208,13 @@ def generate_maze(m, n, rook_board):
         right = grid[i][j + 1] if j+1 < n else grid[i][j]-1
         diagonal = grid[i + 1][j + 1] if i+1<m and j+1<n else grid[i][j]-1
 
-        # Check for NW corner: both down and right are current-1
+        # Check for SE corner: both down and right are current-1
         if down == current - 1 and right == current - 1:
-            return 'N'
-
-        # Check for SE corner: diagonal is current-1, and both down and right equal current
-        if diagonal == current - 1 and down == current and right == current:
             return 'S'
+
+        # Check for NW corner: diagonal is current-1, and both down and right equal current
+        if diagonal == current - 1 and down == current and right == current:
+            return 'N'
 
         # Check for Horizontal edge: down is current-1, right equals current
         if down == current - 1 and right == current:
@@ -342,7 +342,7 @@ def str_maze(grid):
     for i in range(m):
         row_str = ""
         for j in range(n):
-            if grid[i][j] == 'N':
+            if grid[i][j] == 'S':
                 row_str += f"{BLUE}{grid[i][j]}{RESET} "
             else:
                 row_str += f"{grid[i][j]} "
@@ -383,11 +383,19 @@ def str_maze_by_type(grid):
     
     # Mapping from cell type to box-drawing character
     symbol_map = {
-        'S': '┌',
-        'N': '┘',
+        'N': '┌',
+        'S': '┘',
         'H': '─',
         'V': '│',
         ' ': ' '
+    }
+
+    symbol_map = {
+        'N': '\u250F',
+        'S': '\u251B',
+        'H': '\u2501',
+        'V': '\u2503',
+        ' ': '\u0020'
     }
     
     # ANSI escape code for blue color
@@ -399,7 +407,7 @@ def str_maze_by_type(grid):
     for i in range(m):
         row_str = ""
         for j in range(n):
-            if grid[i][j] == 'N':
+            if grid[i][j] == 'S':
                 row_str += f"{BLUE}{symbol_map[grid[i][j]]}{RESET}"
             else:
                 row_str += symbol_map[grid[i][j]]
@@ -602,7 +610,7 @@ def print_all_R(m, n):
         The total number of rook boards printed
     """
     count = 0
-    print(f"All rook boards for m={m}, n={n}:")
+    print(f"All rook boards/mazes for m={m}, n={n}:")
     print("-" * 80)
     
     for rook_board in generate_R(m, n):
