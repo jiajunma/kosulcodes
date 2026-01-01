@@ -685,6 +685,8 @@ def maze_to_RB(maze):
     """
     Convert a maze grid to a rook board by extracting positions of 'S' entries.
     Only works for square mazes where m == n.
+
+    This is [FGT (before) Lemma~4.2.5]
     
     Args:
         maze: A 2D list (matrix) representing the maze
@@ -725,6 +727,10 @@ def maze_to_RB(maze):
 
     
 def RB_to_maze(w,beta,m,n):
+    """
+    Send RB_N to Maze_N,N. 
+    This is [FGT Lemma 4.2.5]
+    """
     def compute_nw_envelope(X):
         """
         Compute the Northwest envelope of a rook board as a matrix.
