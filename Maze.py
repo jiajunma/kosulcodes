@@ -343,9 +343,9 @@ def str_maze(grid):
         row_str = ""
         for j in range(n):
             if grid[i][j] == 'S':
-                row_str += f"{BLUE}{grid[i][j]}{RESET} "
+                row_str += f"{BLUE}{grid[i][j]}{RESET}"
             else:
-                row_str += f"{grid[i][j]} "
+                row_str += f"{grid[i][j]}"
         lines.append(row_str.rstrip())
     
     return "\n".join(lines) 
@@ -944,6 +944,8 @@ def print_all_R(m, n):
                 print(f"{str_maze(maze2)}")
                 print(f"{str_maze_by_type(maze2)}")
                 print("✗")
+        print()
+        print()
 
     
     print("-" * 80)
