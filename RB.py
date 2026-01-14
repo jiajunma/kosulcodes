@@ -176,9 +176,9 @@ def str_colored_partition(w, I):
     
     for i in range(1, n + 1):
         if i in I:
-            result.append(f"{BLUE}{w[i-1]}{RESET}")
-        else:
             result.append(f"{RED}{w[i-1]}{RESET}")
+        else:
+            result.append(f"{BLUE}{w[i-1]}{RESET}")
     
     return f"[{', '.join(result)}]"
 

@@ -2,7 +2,7 @@ from itertools import combinations, permutations
 from math import comb, factorial
 from typing import Set, Tuple, List
 from enum import Enum
-
+from RB import *
 
 
 def generate_R(m, n):
@@ -362,34 +362,6 @@ def print_maze(grid):
     print(str_maze(grid), end="")
 
 
-
-def str_colored_partition(w, I):
-    """
-    Generate colored partition string for a permutation w.
-    Elements at positions in I are colored blue, others are colored red.
-    
-    Args:
-        w: A permutation (tuple or list)
-        I: A set of positions to color blue (1-indexed)
-    
-    Returns:
-        A string with ANSI color codes showing the colored partition
-    """
-    # ANSI color codes
-    BLUE = '\033[94m'
-    RED = '\033[91m'
-    RESET = '\033[0m'
-    
-    n = len(w)
-    result = []
-    
-    for i in range(1, n + 1):
-        if i in I:
-            result.append(f"{BLUE}{w[i-1]}{RESET}")
-        else:
-            result.append(f"{RED}{w[i-1]}{RESET}")
-    
-    return f"[{', '.join(result)}]"
 
 
 
@@ -935,8 +907,11 @@ def print_all_R(m, n):
         # if m=n, test Maze to RB and RB to Maze
         if m == n:
             w,beta = maze_to_RB(maze)
+            sigma = beta_to_sigma(w,beta)
             maze2 = RB_to_maze(w,beta,m,n)
+
             print(f"{str_colored_partition(w,beta)}")
+            print(f"{str_colored_partition(w,sigma)}")
             if maze2 == maze : 
                 print("✓")
             else:
@@ -944,8 +919,6 @@ def print_all_R(m, n):
                 print(f"{str_maze(maze2)}")
                 print(f"{str_maze_by_type(maze2)}")
                 print("✗")
-        print()
-        print()
 
     
     print("-" * 80)
