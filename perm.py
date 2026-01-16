@@ -189,4 +189,39 @@ def left_descent_set(w):
     return right_descent_set(inverse_permutation(w))
 
 
+    # INSERT_YOUR_CODE
+def is_bruhat_leq(u, v):
+    """
+    Decide whether permutation u is <= v in the (strong) Bruhat order.
+
+    This uses the subword criterion for the Bruhat order:
+    For all 1 <= i <= j <= n, the number of elements <= i in the initial segment u[:j]
+    is at least as large as the number of such elements in v[:j].
+
+    Args:
+        u: Permutation as a tuple or list, length n.
+        v: Permutation as a tuple or list, length n.
+
+    Returns:
+        True if u <= v in the (strong) Bruhat order, else False.
+
+    Examples:
+        >>> is_bruhat_leq((1,2,3), (3,2,1))
+        True
+        >>> is_bruhat_leq((2,1,3), (3,1,2))
+        True
+        >>> is_bruhat_leq((3,1,2), (2,3,1))
+        False
+    """
+    n = len(u)
+    for j in range(1, n+1):
+        for i in range(1, n+1):
+            u_count = sum(1 for x in u[:j] if x <= i)
+            v_count = sum(1 for x in v[:j] if x <= i)
+            if u_count < v_count:
+                return False
+    return True
+
+
+
 
