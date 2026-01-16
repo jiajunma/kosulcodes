@@ -1,5 +1,8 @@
 from itertools import permutations, chain, combinations
 
+from perm import *
+
+
 def generate_permutations(n):
     """
     Generate all permutations of numbers from 1 to n
@@ -227,6 +230,185 @@ def sigma_to_beta(w, sigma):
     assert is_beta_on_subset(w, beta), f"Beta {beta} does not satisfy the beta condition on w={w}"
     return beta
 
+def root_type1(w, sigma):
+    """
+    Determine the root type for each simple reflection s_i in S_1 
+
+    For each i in {1, ..., n-1}, classify (s_i, O_sigma) into U-/U+/T-/T+ and
+    compute the corresponding s_i-companion(s).
+
+    Args:
+        w: A permutation (tuple or list)
+        sigma: A set of positions (1-indexed)
+
+    Returns:
+        A dict mapping i -> {"type": str, "companions": list of (w, sigma_set)}
+    """
+    n = len(w)
+    sigma_set = set(sigma)
+    w_sigma_image = {w[i - 1] for i in sigma_set}
+    w_inv = inverse_permutation(w)
+    l_w = length_of_permutation(w)
+    result = {}
+
+    for i in range(1, n):
+        s_i = transposition(i, i + 1, n)
+        s_i_w = permutation_prod(s_i, w)
+        l_siw = length_of_permutation(s_i_w)
+        inter = w_sigma_image & {i, i + 1}
+
+        if l_siw > l_w:
+            if inter == {i} or not inter:
+                result[i] = {
+                    "type": "U-",
+                    "companions": [(s_i_w, set(sigma_set))],
+                }
+            elif inter == {i + 1}:
+                result[i] = {
+                    "type": "T-",
+                    "companions": [
+                        (s_i_w, set(sigma_set)),
+                        (s_i_w, set(sigma_set) | {w_inv[i - 1]}),
+                    ],
+                }
+            else:
+                raise ValueError(f"Unhandled case for i={i}, inter={inter}, l(s_i w)>l(w), in fact this case should not happen")
+        elif l_siw < l_w:
+            if inter == {i + 1} or not inter:
+                result[i] = {
+                    "type": "U+",
+                    "companions": [(s_i_w, set(sigma_set))],
+                }
+            elif inter == {i}:
+                result[i] = {
+                    "type": "T-",
+                    "companions": [
+                        (s_i_w, set(sigma_set)),
+                        (w, set(sigma_set) | {w_inv[i]}),
+                    ],
+                }
+            elif inter == {i, i + 1}:
+                new_sigma = set(sigma_set)
+                new_sigma.discard(w_inv[i])
+                result[i] = {
+                    "type": "T+",
+                    "companions": [
+                        (w, set(new_sigma)),
+                        (s_i_w, set(new_sigma)),
+                    ],
+                }
+            else:
+                raise ValueError(f"Unhandled case for i={i}, inter={inter}, l(s_i w)<l(w), in fact this case should not happen")
+        else:
+            raise ValueError(f"Unexpected length equality for i={i}")
+
+    return result
+
+def root_type2(w, sigma):
+    """
+    Determine the root type for each simple reflection s'_i in S_2.
+
+    For each i in {1, ..., n-1}, classify (s'_i, O_sigma) into U-/U+/T-/T+
+    and compute the corresponding s'_i-companion(s).
+
+    Args:
+        w: A permutation (tuple or list)
+        sigma: A set of positions (1-indexed)
+
+    Returns:
+        A dict mapping i -> {"type": str, "companions": list of (w, sigma_set)}
+    """
+    n = len(w)
+    sigma_set = set(sigma)
+    l_w = length_of_permutation(w)
+    result = {}
+
+    for i in range(1, n):
+        s_i = transposition(i, i + 1, n)
+        w_s_i = permutation_prod(w, s_i)
+        l_wsi = length_of_permutation(w_s_i)
+        inter = sigma_set & {i, i + 1}
+        sigma_swapped = {s_i[j - 1] for j in sigma_set}
+
+        if l_wsi > l_w:
+            if inter == {i} or not inter:
+                result[i] = {
+                    "type": "U-",
+                    "companions": [(w_s_i, set(sigma_swapped))],
+                }
+            elif inter == {i + 1}:
+                result[i] = {
+                    "type": "T-",
+                    "companions": [
+                        (w_s_i, set(sigma_swapped)),
+                        (w_s_i, set(sigma_swapped) | {i + 1}),
+                    ],
+                }
+            else:
+                raise ValueError(
+                    f"Unhandled case for i={i}, inter={inter}, l(w s_i)>l(w), in fact this case should not happen"
+                )
+        elif l_wsi < l_w:
+            if inter == {i + 1} or not inter:
+                result[i] = {
+                    "type": "U+",
+                    "companions": [(w_s_i, set(sigma_swapped))],
+                }
+            elif inter == {i}:
+                result[i] = {
+                    "type": "T-",
+                    "companions": [
+                        (w_s_i, set(sigma_swapped)),
+                        (w, set(sigma_swapped) | {i}),
+                    ],
+                }
+            elif inter == {i, i + 1}:
+                sigma_without_ip1 = set(sigma_set)
+                sigma_without_ip1.discard(i + 1)
+                sigma_without_i = set(sigma_set)
+                sigma_without_i.discard(i)
+                result[i] = {
+                    "type": "T+",
+                    "companions": [
+                        (w, set(sigma_without_ip1)),
+                        (w_s_i, set(sigma_without_i)),
+                    ],
+                }
+            else:
+                raise ValueError(
+                    f"Unhandled case for i={i}, inter={inter}, l(w s_i)<l(w), in fact this case should not happen"
+                )
+        else:
+            raise ValueError(f"Unexpected length equality for i={i}")
+
+    return result
+
+def pretty_print_root_type_results(w, sigma, root_type_func):
+    """
+    Nicely print the output of root_type1 or root_type2 for a given (w, sigma).
+
+    Args:
+        w: A permutation (tuple or list)
+        sigma: A set or list of positions (1-indexed)
+        root_type_func: Function, either root_type1 or root_type2
+
+    Output:
+        Prints a table/report to stdout.
+    """
+    result = root_type_func(w, sigma)
+    n = len(w)
+    print(f"(w,σ) = {str_colored_partition(w, sigma)}")
+    print(f"Resulting types for each i in 1..{n-1}:")
+    print("-" * 70)
+    print(f"{'i':^3} | {'type':^8} | {'companions (w,sigma)':^50}")
+    print("-" * 70)
+    for i in range(1, n):
+        typ = result[i]["type"]
+        companions = result[i]["companions"]
+        companions_colored = "; ".join(str_colored_partition(ww, ss) for (ww, ss) in companions)
+        print(f"{i:^3} | {typ:^8} | {companions_colored}")
+    print("-" * 70)
+
 
 
 def print_all_w_sigma_pairs(n, verbose=1):
@@ -262,6 +444,9 @@ def print_all_w_sigma_pairs(n, verbose=1):
             print(f"{count}: (w,σ)={str_colored_partition(w, sigma)} (w,β)={str_colored_partition(w, beta)}")
             if not is_equal:
                 print(f"   WARNING: σ ≠ σ' for permutation {w}")
+        if verbose >= 3:
+            pretty_print_root_type_results(w, sigma, root_type1)
+            pretty_print_root_type_results(w, sigma, root_type2)
     
     print(f"Total pairs: {count}")
     print(f"Mismatches: {mismatch_count}")
