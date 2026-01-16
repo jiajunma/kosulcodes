@@ -69,9 +69,11 @@ def rb_hasse_diagram(n, output_path):
         output_path: path without file extension for Graphviz output.
     """
     dot = Digraph(comment=f"RB Bruhat diagram for n={n}")
-    dot.attr(splines="false")
+    dot.attr(splines="true")
+    #dot.attr(splines="false")
     dot.attr("node", shape="box", fontsize="10")
-    dot.attr("edge", fontsize="9", arrowhead="none")
+    #dot.attr("edge", fontsize="9", arrowhead="none")
+    dot.attr("edge", fontsize="9", arrowhead="normal")
 
     nodes = {}
     for w, sigma in generate_all_w_sigma_pairs(n):
