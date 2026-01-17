@@ -1,4 +1,5 @@
 from itertools import permutations, chain, combinations
+import csv
 
 from perm import *
 
@@ -159,15 +160,15 @@ def beta_to_sigma(w, beta):
 
 def str_colored_partition(w, I):
     """
-    Generate colored partition string for a permutation w.
-    Elements at positions in I are colored blue, others are colored red.
+    Generate colored permutation string for a permutation w.
+    Elements at positions in I are colored red, others are colored blue.
     
     Args:
         w: A permutation (tuple or list)
-        I: A set of positions to color blue (1-indexed)
+        I: A set of positions to color red (1-indexed)
     
     Returns:
-        A string with ANSI color codes showing the colored partition
+        A string with ANSI color codes showing the colored permutation
     """
     # ANSI color codes
     BLUE = '\033[94m'
@@ -183,7 +184,7 @@ def str_colored_partition(w, I):
         else:
             result.append(f"{BLUE}{w[i-1]}{RESET}")
     
-    return f"[{', '.join(result)}]"
+    return f"({', '.join(result)})"
 
 
 def generate_all_w_sigma_pairs(n):
@@ -410,6 +411,167 @@ def pretty_print_root_type_results(w, sigma, root_type_func):
     print("-" * 70)
 
 
+def _sigma_sort_key(sigma):
+    return (len(sigma), tuple(sorted(sigma)))
+
+
+def _format_tuple(values):
+    return "(" + ",".join(str(x) for x in values) + ")"
+
+
+def _format_set(values):
+    if not values:
+        return "{}"
+    return "{" + ",".join(str(x) for x in sorted(values)) + "}"
+
+
+def _format_w_sigma_label(w, sigma):
+    return f"w={_format_tuple(w)};sigma={_format_set(sigma)}"
+
+def _format_colored_w_label(w, sigma):
+    return str_colored_partition(w, sigma)
+
+def _format_colored_w_html(w, sigma):
+    parts = []
+    for i in range(1, len(w) + 1):
+        val = w[i - 1]
+        if i in sigma:
+            parts.append(f"<span class=\"red\">{val}</span>")
+        else:
+            parts.append(f"<span class=\"blue\">{val}</span>")
+    return "(" + ", ".join(parts) + ")"
+
+
+def collect_w_sigma_pairs(n):
+    """
+    Collect all (w, sigma) pairs in a deterministic order.
+
+    Args:
+        n: The size of the permutation.
+
+    Returns:
+        List of (w, sigma) pairs.
+    """
+    pairs = []
+    for w in generate_permutations(n):
+        sigmas = list(generate_all_sigma(w))
+        sigmas.sort(key=_sigma_sort_key)
+        for sigma in sigmas:
+            pairs.append((w, sigma))
+    return pairs
+
+
+def write_root_type_table(n, root_type_func, output_path):
+    """
+    Write a CSV table for root types.
+
+    Columns: all (w, sigma) pairs.
+    Rows: simple reflections s_i for i in 1..n-1.
+    Cells: root type.
+
+    Args:
+        n: The size of the permutation.
+        root_type_func: Function, either root_type1 or root_type2.
+        output_path: Path to write the CSV file.
+    """
+    pairs = collect_w_sigma_pairs(n)
+    headers = ["simple_reflection"] + [_format_colored_w_label(w, sigma) for w, sigma in pairs]
+    rows = [[f"s_{i}"] for i in range(1, n)]
+
+    for w, sigma in pairs:
+        result = root_type_func(w, sigma)
+        for i in range(1, n):
+            rows[i - 1].append(result[i]["type"])
+
+    with open(output_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        writer.writerows(rows)
+
+
+def write_root_type_table_orbit_rows(n, output_path):
+    """
+    Write a CSV table for both root type 1 and 2.
+
+    Rows: all (w, sigma) pairs (orbits).
+    Columns: simple reflections s_i for i in 1..n-1, with type1/type2.
+    Cells: root type.
+
+    Args:
+        n: The size of the permutation.
+        output_path: Path to write the CSV file.
+    """
+    pairs = collect_w_sigma_pairs(n)
+    headers = ["orbit"]
+    for i in range(1, n):
+        headers.append(f"s_{i}_type1")
+        headers.append(f"s_{i}_type2")
+
+    rows = []
+    for w, sigma in pairs:
+        result1 = root_type1(w, sigma)
+        result2 = root_type2(w, sigma)
+        row = [_format_colored_w_label(w, sigma)]
+        for i in range(1, n):
+            row.append(result1[i]["type"])
+            row.append(result2[i]["type"])
+        rows.append(row)
+
+    with open(output_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(headers)
+        writer.writerows(rows)
+
+def write_root_type_table_orbit_rows_html(n, output_path):
+    """
+    Write an HTML table for both root type 1 and 2.
+
+    Rows: all (w, sigma) pairs (orbits).
+    Columns: simple reflections s_i for i in 1..n-1, with type1/type2.
+    Cells: root type.
+
+    Args:
+        n: The size of the permutation.
+        output_path: Path to write the HTML file.
+    """
+    pairs = collect_w_sigma_pairs(n)
+
+    headers = ["orbit"]
+    for i in range(1, n):
+        headers.append(f"s_{i}_type1")
+        headers.append(f"s_{i}_type2")
+
+    rows = []
+    for w, sigma in pairs:
+        result1 = root_type1(w, sigma)
+        result2 = root_type2(w, sigma)
+        row = [_format_colored_w_html(w, sigma)]
+        for i in range(1, n):
+            row.append(result1[i]["type"])
+            row.append(result2[i]["type"])
+        rows.append(row)
+
+    with open(output_path, "w") as f:
+        f.write("<!doctype html>\n")
+        f.write("<html>\n<head>\n<meta charset=\"utf-8\">\n")
+        f.write("<style>\n")
+        f.write("table{border-collapse:collapse;font-family:Arial, sans-serif;}\n")
+        f.write("th,td{border:1px solid #999;padding:4px 8px;text-align:left;}\n")
+        f.write(".red{color:#c00;}\n")
+        f.write(".blue{color:#06c;}\n")
+        f.write("</style>\n</head>\n<body>\n")
+        f.write("<table>\n<thead>\n<tr>\n")
+        for h in headers:
+            f.write(f"<th>{h}</th>\n")
+        f.write("</tr>\n</thead>\n<tbody>\n")
+        for row in rows:
+            f.write("<tr>\n")
+            for cell in row:
+                f.write(f"<td>{cell}</td>\n")
+            f.write("</tr>\n")
+        f.write("</tbody>\n</table>\n</body>\n</html>\n")
+
+
 
 def print_all_w_sigma_pairs(n, verbose=1):
     """
@@ -500,19 +662,32 @@ if __name__ == "__main__":
 
     import sys
     
-    # Read n from command line, default to 4 if no parameter provided
+    # Table mode: python3 RB.py <n> 4
+    # Only mode=4 writes the combined table (orbit rows, simple reflections columns).
+    if len(sys.argv) > 2:
+        n = int(sys.argv[1])
+        mode = int(sys.argv[2])
+        if mode == 4:
+            output_path = f"rb_table_root_types_n{n}.csv"
+            write_root_type_table_orbit_rows(n, output_path)
+            print(f"Wrote table: {output_path}")
+            sys.exit(0)
+        if mode == 5:
+            output_path = f"rb_table_root_types_n{n}.html"
+            write_root_type_table_orbit_rows_html(n, output_path)
+            print(f"Wrote table: {output_path}")
+            sys.exit(0)
+
+    # Default behavior
     if len(sys.argv) > 1:
         n = int(sys.argv[1])
     else:
         n = 4
-    
-    # Read verbose level from command line, default to 1 if no parameter provided
+
     if len(sys.argv) > 2:
         verbose = int(sys.argv[2])
     else:
         verbose = 1
-    
-    # Verify that for each permutation w, the number of valid sigma equals the number of valid beta
+
     verify_sigma_beta_equality(n, verbose)
-    
     print_all_w_sigma_pairs(n, verbose)
