@@ -21,7 +21,6 @@ def length(w):
         _length_cache[w] = length_of_permutation(w)
     return _length_cache[w]
 
-
 def simple_reflections(n):
     return [simple_reflection(i, n) for i in range(1, n)]
 
@@ -58,18 +57,27 @@ def hecke_multiply_by_simple_inverse(element, s):
     """
     Left-multiply by T_s^{-1} where T_s^{-1} = q^{-1} T_s + (q^{-1} - 1).
     """
-    result = {}
-    for w, coeff in element.items():
-        sw = permutation_prod(s, w)
-        result[sw] = result.get(sw, 0) + coeff * v ** -2
-        result[w] = result.get(w, 0) + coeff * (v ** -2 - 1)
-    return result
+    return add_elements(
+        scalar_multiply(hecke_multiply_by_simple(element, s), v ** -2),
+        scalar_multiply(element, v ** -2 - 1),
+    )
+
+
+def scalar_multiply(element, poly):
+    return {w: sp.expand(poly * coeff) for w, coeff in element.items() if coeff != 0}
+
+
+def add_elements(element1, element2):
+    result = dict(element1)
+    for w, coeff in element2.items():
+        result[w] = result.get(w, 0) + coeff
+    return {w: sp.expand(coeff) for w, coeff in result.items() if coeff != 0}
 
 
 _tw_tu_cache = {}
 
 
-def multiply_Tw_Tu(w, u, n, lengths=length):
+def multiply_Tw_Tu(w, u, n):
     """
     Multiply T_w * T_u in the Hecke algebra.
     """
@@ -78,12 +86,12 @@ def multiply_Tw_Tu(w, u, n, lengths=length):
         return _tw_tu_cache[key]
     product = {u: sp.Integer(1)}
     for s in reduced_word(w, n):
-        product = hecke_multiply_by_simple(product, s, lengths)
+        product = hecke_multiply_by_simple(product, s)
     _tw_tu_cache[key] = product
     return product
 
 
-def hecke_multiply(element1, element2, n, lengths=length):
+def hecke_multiply(element1, element2, n):
     """
     Multiply two Hecke algebra elements in the T-basis.
     """
@@ -91,7 +99,7 @@ def hecke_multiply(element1, element2, n, lengths=length):
     for w, coeff_w in element1.items():
         product = {u: coeff_w * coeff_u for u, coeff_u in element2.items()}
         for s in reduced_word(w, n):
-            product = hecke_multiply_by_simple(product, s, lengths)
+            product = hecke_multiply_by_simple(product, s)
         for k, vcoeff in product.items():
             result[k] = result.get(k, 0) + vcoeff
     return result
@@ -141,17 +149,17 @@ def bar_coeff(expr):
     return sp.expand(expr.subs({v: v ** -1}))
 
 
-def inverse_T_w(w, n, lengths):
+def inverse_T_w(w, n):
     """
     Compute T_w^{-1} in the T-basis via a reduced word.
     """
     product = {tuple(range(1, n + 1)): sp.Integer(1)}
     for s in reduced_word(w, n):
-        product = hecke_multiply_by_simple_inverse(product, s, lengths)
+        product = hecke_multiply_by_simple_inverse(product, s)
     return product
 
 
-def bar_element(element, n, lengths):
+def bar_element(element, n):
     """
     Bar involution: q -> q^{-1}, v -> v^{-1}, T_w -> T_{w^{-1}}^{-1}.
     """
@@ -159,14 +167,14 @@ def bar_element(element, n, lengths):
     for w, coeff in element.items():
         coeff_bar = bar_coeff(coeff)
         w_inv = inverse_permutation(w)
-        inv_tw = inverse_T_w(w_inv, n, lengths)
+        inv_tw = inverse_T_w(w_inv, n)
         for u, c_u in inv_tw.items():
             result[u] = result.get(u, 0) + coeff_bar * c_u
     return {k: sp.expand(vv) for k, vv in result.items() if vv != 0}
 
 
-def is_bar_invariant(element, n, lengths):
-    return bar_element(element, n, lengths) == {k: sp.expand(vv) for k, vv in element.items() if vv != 0}
+def is_bar_invariant(element, n):
+    return bar_element(element, n) == {k: sp.expand(vv) for k, vv in element.items() if vv != 0}
 
 
 def pretty_print_element(element, label=None):
@@ -200,7 +208,7 @@ def reduced_word(w, n):
     return word
 
 
-def kl_polynomial(x, y, n, lengths, cache):
+def kl_polynomial(x, y, n, cache):
     """
     Compute KL polynomial P_{x,y}(q) for type A_n.
     """
@@ -214,29 +222,29 @@ def kl_polynomial(x, y, n, lengths, cache):
 
     for s in simple_reflections(n):
         sy = permutation_prod(s, y)
-        if lengths(sy) < lengths(y):
+        if length(sy) < length(y):
             sx = permutation_prod(s, x)
-            if lengths(sx) < lengths(x):
-                value = kl_polynomial(sx, sy, n, lengths, cache)
+            if length(sx) < length(x):
+                value = kl_polynomial(sx, sy, n, cache)
             else:
-                value = q * kl_polynomial(sx, sy, n, lengths, cache)
-                value += (q - 1) * kl_polynomial(x, sy, n, lengths, cache)
+                value = q * kl_polynomial(sx, sy, n, cache)
+                value += (q - 1) * kl_polynomial(x, sy, n, cache)
                 for z in cache["perms"]:
                     if z == x or z == sy:
                         continue
                     if not is_bruhat_leq(x, z) or not is_bruhat_leq(z, sy):
                         continue
                     sz = permutation_prod(s, z)
-                    if lengths(sz) >= lengths(z):
+                    if length(sz) >= length(z):
                         continue
-                    diff = lengths(sy) - lengths(z) - 1
+                    diff = length(sy) - length(z) - 1
                     if diff < 0 or diff % 2 != 0:
                         continue
                     deg = diff // 2
-                    p_z_sy = kl_polynomial(z, sy, n, lengths, cache)
+                    p_z_sy = kl_polynomial(z, sy, n, cache)
                     mu = sp.Poly(p_z_sy, v).coeff_monomial(v ** (2 * deg))
                     if mu != 0:
-                        value -= mu * kl_polynomial(x, z, n, lengths, cache)
+                        value -= mu * kl_polynomial(x, z, n, cache)
             cache[key] = sp.simplify(value)
             return cache[key]
 
@@ -250,7 +258,7 @@ def kl_polynomials(n):
     for y in sorted(perms, key=length):
         for x in perms:
             if is_bruhat_leq(x, y):
-                kl[(x, y)] = kl_polynomial(x, y, n, length, cache)
+                kl[(x, y)] = kl_polynomial(x, y, n, cache)
     return kl
 
 
@@ -269,7 +277,7 @@ def canonical_basis(n):
         for x in perms:
             if not is_bruhat_leq(x, w):
                 continue
-            p_xw = kl_polynomial(x, w, n, length, cache)
+            p_xw = kl_polynomial(x, w, n, cache)
             d = length(w) - length(x)
             coeff = (-1) ** d * v ** d * p_xw.subs(v, v ** -1)
             coeffs[x] = sp.expand(coeff)
@@ -292,6 +300,6 @@ if __name__ == "__main__":
     for w in sorted(basis, key=tuple):
         pretty_print_element(basis[w], label=f"C_{w} =")
     perms = list(generate_permutations(n))
-    all_bar = all(is_bar_invariant(basis[w], n, length) for w in perms)
+    all_bar = all(is_bar_invariant(basis[w], n) for w in perms)
     print(f"Canonical basis bar-invariant: {all_bar}")
     print(f"Total computation time: {elapsed:.3f}s")
