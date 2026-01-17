@@ -119,6 +119,10 @@ def inverse_permutation(w):
     Examples:
         >>> inverse_permutation((3, 1, 2))
         (2, 3, 1)
+        >>> w = (4, 2, 5, 1, 3)
+        >>> inv = inverse_permutation(w)
+        >>> permutation_prod(w, inv)
+        (1, 2, 3, 4, 5)
     """
     n = len(w)
     inv = [0] * n
@@ -189,6 +193,35 @@ def left_descent_set(w):
     return right_descent_set(inverse_permutation(w))
 
 
+def reduced_word(w):
+    """
+    Return a reduced word (as simple reflections) for permutation w.
+
+    Examples:
+        >>> w = (3, 1, 4, 2)
+        >>> word = reduced_word(w)
+        >>> perm = (1, 2, 3, 4)
+        >>> for s in word:
+        ...     perm = permutation_prod(s, perm)
+        >>> perm == w
+        True
+    """
+    w = list(w)
+    n = len(w)
+    word = []
+    # Bubble-sort to identity, recording adjacent swaps.
+    for _ in range(n):
+        swapped = False
+        for j in range(n - 1):
+            if w[j] > w[j + 1]:
+                w[j], w[j + 1] = w[j + 1], w[j]
+                word.append(simple_reflection(j + 1, n))
+                swapped = True
+        if not swapped:
+            break
+    return word
+
+
     # INSERT_YOUR_CODE
 def is_bruhat_leq(u, v):
     """
@@ -221,6 +254,23 @@ def is_bruhat_leq(u, v):
             if u_count < v_count:
                 return False
     return True
+
+
+if __name__ == "__main__":
+    # Quick test of reduced_word using the functions above
+    w = (3, 1, 4, 2)
+    n = len(w)
+    word = reduced_word(w)
+    print("Permutation w:", w)
+    print("Reduced word:")
+    for s in word:
+        print(s)
+    # Test that applying word to identity gives w
+    perm = tuple(range(1, n+1))
+    for s in word:
+        perm = permutation_prod(s, perm)
+    print("Product of reduced word (should be w):", perm)
+    print("Test passed:", perm == w)
 
 
 

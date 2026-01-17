@@ -3,303 +3,299 @@ import sympy as sp
 from perm import (
     generate_permutations,
     is_bruhat_leq,
-    length_of_permutation,
     inverse_permutation,
+    length_of_permutation,
     permutation_prod,
+    reduced_word as perm_reduced_word,
     simple_reflection,
 )
 
 v = sp.symbols("v")
 q = v * v
 
+class HeckeElement:
+    def __init__(self, algebra, coeffs=None):
+        self.algebra = algebra
+        self.coeffs = coeffs or {}
 
-_length_cache = {}
+    def __add__(self, other):
+        if not isinstance(other, HeckeElement):
+            return NotImplemented
+        if self.algebra is not other.algebra:
+            raise ValueError("Cannot add elements from different HeckeA instances")
+        return HeckeElement(self.algebra, self.algebra.add_elements(self.coeffs, other.coeffs))
 
+    def __mul__(self, other):
+        if isinstance(other, HeckeElement):
+            if self.algebra is not other.algebra:
+                raise ValueError("Cannot multiply elements from different HeckeA instances")
+            coeffs = self.algebra.hecke_multiply(self.coeffs, other.coeffs)
+            return HeckeElement(self.algebra, coeffs)
+        return NotImplemented
 
-def length(w):
-    if w not in _length_cache:
-        _length_cache[w] = length_of_permutation(w)
-    return _length_cache[w]
+    def __rmul__(self, scalar):
+        """
+        Scalar multiplication: scalar * element
+        """
+        return HeckeElement(self.algebra, self.algebra.scalar_multiply(self.coeffs, scalar))
 
-def simple_reflections(n):
-    return [simple_reflection(i, n) for i in range(1, n)]
+    def bar(self):
+        coeffs = self.algebra.bar_element(self.coeffs)
+        return HeckeElement(self.algebra, coeffs)
 
+    def is_bar_invariant(self):
+        return self.algebra.is_bar_invariant(self.coeffs)
 
-_mul_simple_cache = {}
-
-
-def hecke_multiply_by_simple(element, s):
-    """
-    Left-multiply a Hecke algebra element by a simple reflection s.
-
-    element: dict {w: coeff} representing sum coeff * T_w.
-    """
-    key = (s, tuple(sorted(element.items())))
-    if key in _mul_simple_cache:
-        return _mul_simple_cache[key]
-    result = {}
-    for w, coeff in element.items():
-        sw = permutation_prod(s, w)
-        if length(sw) > length(w):
-            result[sw] = result.get(sw, 0) + coeff
-        else:
-            # When the simple reflection s acts on T_w and lengths(sw) < lengths(w), the Hecke relation is
-            # T_s T_w = (q - 1) T_w + q T_{sw}, which reflects the quadratic Hecke algebra relation
-            # (T_s + 1)(T_s - q) = 0 and its action on the standard basis.
-            # So T_s^2 = (q - 1) T_s + q.
-            result[w] = result.get(w, 0) + coeff * (q - 1)
-            result[sw] = result.get(sw, 0) + coeff * q
-    _mul_simple_cache[key] = result
-    return result
+    def pretty(self, label=None):
+        self.algebra.pretty_print_element(self.coeffs, label=label)
 
 
-def hecke_multiply_by_simple_inverse(element, s):
-    """
-    Left-multiply by T_s^{-1} where T_s^{-1} = q^{-1} T_s + (q^{-1} - 1).
-    """
-    return add_elements(
-        scalar_multiply(hecke_multiply_by_simple(element, s), v ** -2),
-        scalar_multiply(element, v ** -2 - 1),
-    )
+class HeckeA:
+    def __init__(self, n):
+        self.n = n
+        self._length_cache = {}
+        self._mul_simple_cache = {}
+        self._tw_tu_cache = {}
+        self._inverse_cache = {}
+
+    def length(self, w):
+        if w not in self._length_cache:
+            self._length_cache[w] = length_of_permutation(w)
+        return self._length_cache[w]
+
+    def simple_reflections(self):
+        return [simple_reflection(i, self.n) for i in range(1, self.n)]
 
 
-def scalar_multiply(element, poly):
-    return {w: sp.expand(poly * coeff) for w, coeff in element.items() if coeff != 0}
-
-
-def add_elements(element1, element2):
-    result = dict(element1)
-    for w, coeff in element2.items():
-        result[w] = result.get(w, 0) + coeff
-    return {w: sp.expand(coeff) for w, coeff in result.items() if coeff != 0}
-
-
-_tw_tu_cache = {}
-
-
-def multiply_Tw_Tu(w, u, n):
-    """
-    Multiply T_w * T_u in the Hecke algebra.
-    """
-    key = (w, u)
-    if key in _tw_tu_cache:
-        return _tw_tu_cache[key]
-    product = {u: sp.Integer(1)}
-    for s in reduced_word(w, n):
-        product = hecke_multiply_by_simple(product, s)
-    _tw_tu_cache[key] = product
-    return product
-
-
-def hecke_multiply(element1, element2, n):
-    """
-    Multiply two Hecke algebra elements in the T-basis.
-    """
-    result = {}
-    for w, coeff_w in element1.items():
-        product = {u: coeff_w * coeff_u for u, coeff_u in element2.items()}
-        for s in reduced_word(w, n):
-            product = hecke_multiply_by_simple(product, s)
-        for k, vcoeff in product.items():
-            result[k] = result.get(k, 0) + vcoeff
-    return result
-
-
-def format_laurent(expr, var=v):
-    """
-    Format expr as a Laurent polynomial in var.
-    """
-    expr = sp.expand(expr)
-    terms = {}
-    for term in sp.Add.make_args(expr):
-        powers = term.as_powers_dict()
-        exp = powers.get(var, 0)
-        if isinstance(exp, int):
-            exp = int(exp)
-        else:
-            is_int = getattr(exp, "is_integer", None)
-            if is_int is False:
-                raise ValueError(f"Non-integer power in {term}")
-            if is_int is None:
-                raise ValueError(f"Non-integer power in {term}")
-            exp = int(exp)
-        coeff = sp.simplify(term / (var ** exp))
-        terms[exp] = terms.get(exp, 0) + coeff
-    terms = {e: sp.simplify(c) for e, c in terms.items() if c != 0}
-    if not terms:
-        return "0"
-    pieces = []
-    for exp in sorted(terms.keys(), reverse=True):
-        coeff = terms[exp]
-        coeff_str = sp.sstr(coeff)
-        if exp == 0:
-            pieces.append(f"{coeff_str}")
-            continue
-        if coeff == 1:
-            base = f"{var}" if exp == 1 else f"{var}**{exp}"
-        elif coeff == -1:
-            base = f"-{var}" if exp == 1 else f"-{var}**{exp}"
-        else:
-            base = f"{coeff_str}*{var}" if exp == 1 else f"{coeff_str}*{var}**{exp}"
-        pieces.append(base)
-    return " + ".join(pieces).replace("+ -", "- ")
-
-
-def bar_coeff(expr):
-    return sp.expand(expr.subs({v: v ** -1}))
-
-
-def inverse_T_w(w, n):
-    """
-    Compute T_w^{-1} in the T-basis via a reduced word.
-    """
-    product = {tuple(range(1, n + 1)): sp.Integer(1)}
-    for s in reduced_word(w, n):
-        product = hecke_multiply_by_simple_inverse(product, s)
-    return product
-
-
-def bar_element(element, n):
-    """
-    Bar involution: q -> q^{-1}, v -> v^{-1}, T_w -> T_{w^{-1}}^{-1}.
-    """
-    result = {}
-    for w, coeff in element.items():
-        coeff_bar = bar_coeff(coeff)
-        w_inv = inverse_permutation(w)
-        inv_tw = inverse_T_w(w_inv, n)
-        for u, c_u in inv_tw.items():
-            result[u] = result.get(u, 0) + coeff_bar * c_u
-    return {k: sp.expand(vv) for k, vv in result.items() if vv != 0}
-
-
-def is_bar_invariant(element, n):
-    return bar_element(element, n) == {k: sp.expand(vv) for k, vv in element.items() if vv != 0}
-
-
-def pretty_print_element(element, label=None):
-    """
-    Pretty print a Hecke algebra element in the T-basis.
-    """
-    if not element:
-        print(f"{label} 0" if label else "0")
-        return
-    terms = []
-    for w in sorted(element, key=tuple):
-        coeff = sp.expand(element[w])
-        if coeff == 0:
-            continue
-        terms.append(f"({format_laurent(coeff)}) T_{w}")
-    content = " + ".join(terms) if terms else "0"
-    print(f"{label} {content}" if label else content)
-
-
-def reduced_word(w, n):
-    """
-    Return a reduced word (as simple reflections) for w using bubble sort.
-    """
-    w = list(w)
-    word = []
-    for i in range(n):
-        for j in range(n - 1):
-            if w[j] > w[j + 1]:
-                w[j], w[j + 1] = w[j + 1], w[j]
-                word.append(simple_reflection(j + 1, n))
-    return word
-
-
-def kl_polynomial(x, y, n, cache):
-    """
-    Compute KL polynomial P_{x,y}(q) for type A_n.
-    """
-    if x == y:
-        return sp.Integer(1)
-    if not is_bruhat_leq(x, y):
-        return sp.Integer(0)
-    key = (x, y)
-    if key in cache:
-        return cache[key]
-
-    for s in simple_reflections(n):
-        sy = permutation_prod(s, y)
-        if length(sy) < length(y):
-            sx = permutation_prod(s, x)
-            if length(sx) < length(x):
-                value = kl_polynomial(sx, sy, n, cache)
+    def hecke_multiply_by_simple(self, element, s):
+        key = (s, tuple(sorted(element.items())))
+        if key in self._mul_simple_cache:
+            return self._mul_simple_cache[key]
+        result = {}
+        for w, coeff in element.items():
+            sw = permutation_prod(s, w)
+            if self.length(sw) > self.length(w):
+                result[sw] = result.get(sw, 0) + coeff
             else:
-                value = q * kl_polynomial(sx, sy, n, cache)
-                value += (q - 1) * kl_polynomial(x, sy, n, cache)
-                for z in cache["perms"]:
-                    if z == x or z == sy:
-                        continue
-                    if not is_bruhat_leq(x, z) or not is_bruhat_leq(z, sy):
-                        continue
-                    sz = permutation_prod(s, z)
-                    if length(sz) >= length(z):
-                        continue
-                    diff = length(sy) - length(z) - 1
-                    if diff < 0 or diff % 2 != 0:
-                        continue
-                    deg = diff // 2
-                    p_z_sy = kl_polynomial(z, sy, n, cache)
-                    mu = sp.Poly(p_z_sy, v).coeff_monomial(v ** (2 * deg))
-                    if mu != 0:
-                        value -= mu * kl_polynomial(x, z, n, cache)
-            cache[key] = sp.simplify(value)
-            return cache[key]
+                result[w] = result.get(w, 0) + coeff * (q - 1)
+                result[sw] = result.get(sw, 0) + coeff * q
+        self._mul_simple_cache[key] = result
+        return result
 
-    raise ValueError("No descent found to apply KL recursion")
+    def scalar_multiply(self, element, poly):
+        if poly == 0:
+            return {}
+        return {w: sp.expand(poly * coeff) for w, coeff in element.items() if coeff != 0}
 
+    def add_elements(self, element1, element2):
+        result = dict(element1)
+        for w, coeff in element2.items():
+            result[w] = result.get(w, 0) + coeff
+        return {w: sp.expand(coeff) for w, coeff in result.items() if coeff != 0}
 
-def kl_polynomials(n):
-    perms = list(generate_permutations(n))
-    cache = {"perms": perms}
-    kl = {}
-    for y in sorted(perms, key=length):
-        for x in perms:
-            if is_bruhat_leq(x, y):
-                kl[(x, y)] = kl_polynomial(x, y, n, cache)
-    return kl
+    def hecke_multiply_by_simple_inverse(self, element, s):
+        return self.add_elements(
+            self.scalar_multiply(self.hecke_multiply_by_simple(element, s), v ** -2),
+            self.scalar_multiply(element, v ** -2 - 1),
+        )
 
+    def multiply_Tw_Tu(self, w, u):
+        key = (w, u)
+        if key in self._tw_tu_cache:
+            return self._tw_tu_cache[key]
+        product = {u: sp.Integer(1)}
+        for s in perm_reduced_word(w):
+            product = self.hecke_multiply_by_simple(product, s)
+        self._tw_tu_cache[key] = product
+        return product
 
-def canonical_basis(n):
-    """
-    Compute the canonical (Kazhdan-Lusztig) basis in the T-basis.
+    def hecke_multiply(self, element1, element2):
+        result = {}
+        for w, coeff_w in element1.items():
+            for u, coeff_u in element2.items():
+                product = self.multiply_Tw_Tu(w, u)
+                for k, vcoeff in product.items():
+                    result[k] = result.get(k, 0) + coeff_w * coeff_u * vcoeff
+        return result
 
-    Returns:
-        dict: w -> {x: coefficient in v} giving C_w in the T-basis.
-    """
-    perms = list(generate_permutations(n))
-    cache = {"perms": perms}
-    basis = {}
-    for w in perms:
-        coeffs = {}
-        for x in perms:
-            if not is_bruhat_leq(x, w):
+    def format_laurent(self, expr, var=v):
+        expr = sp.expand(expr)
+        terms = {}
+        for term in sp.Add.make_args(expr):
+            powers = term.as_powers_dict()
+            exp = powers.get(var, 0)
+            if isinstance(exp, int):
+                exp = int(exp)
+            else:
+                is_int = getattr(exp, "is_integer", None)
+                if is_int is False:
+                    raise ValueError(f"Non-integer power in {term}")
+                if is_int is None:
+                    raise ValueError(f"Non-integer power in {term}")
+                exp = int(exp)
+            coeff = sp.simplify(term / (var ** exp))
+            terms[exp] = terms.get(exp, 0) + coeff
+        terms = {e: sp.simplify(c) for e, c in terms.items() if c != 0}
+        if not terms:
+            return "0"
+        pieces = []
+        for exp in sorted(terms.keys(), reverse=True):
+            coeff = terms[exp]
+            coeff_str = sp.sstr(coeff)
+            if exp == 0:
+                pieces.append(f"{coeff_str}")
                 continue
-            p_xw = kl_polynomial(x, w, n, cache)
-            d = length(w) - length(x)
-            coeff = (-1) ** d * v ** d * p_xw.subs(v, v ** -1)
-            coeffs[x] = sp.expand(coeff)
-        basis[w] = coeffs
-    return basis
+            if coeff == 1:
+                base = f"{var}" if exp == 1 else f"{var}**{exp}"
+            elif coeff == -1:
+                base = f"-{var}" if exp == 1 else f"-{var}**{exp}"
+            else:
+                base = f"{coeff_str}*{var}" if exp == 1 else f"{coeff_str}*{var}**{exp}"
+            pieces.append(base)
+        return " + ".join(pieces).replace("+ -", "- ")
 
+    def bar_coeff(self, expr):
+        return sp.expand(expr.subs({v: v ** -1}))
+    
+    def regular_coefficient(self, coeffs):
+        return {w: sp.expand(coeff) for w, coeff in coeffs.items() if sp.expand(coeff) != 0}
+
+    def is_equal(self, element1, element2):
+        return self.regular_coefficient(element1) == self.regular_coefficient(element2)
+
+    def inverse_T_w(self, w):
+        """
+        Compute T_w^{-1} in the T-basis.
+
+        Examples:
+            >>> w = (4, 2, 1, 3)
+            >>> H = HeckeA(len(w))
+            >>> inv = H.inverse_T_w(w)
+            >>> prod = H.regular_coefficient(H.hecke_multiply(inv, H.T(w).coeffs))
+            >>> prod == {tuple(range(1, len(w) + 1)): sp.Integer(1)}
+            True
+        """
+        key = tuple(w)
+        if key in self._inverse_cache:
+            return self._inverse_cache[key]
+        product = {tuple(range(1, self.n + 1)): sp.Integer(1)}
+        for s in reversed(perm_reduced_word(w)):
+            product = self.hecke_multiply_by_simple_inverse(product, s)
+        self._inverse_cache[key] = product
+        return product
+
+    def bar_element(self, element):
+        result = {}
+        for w, coeff in element.items():
+            coeff_bar = self.bar_coeff(coeff)
+            w_inv = inverse_permutation(w)
+            inv_tw = self.inverse_T_w(w_inv)
+            for u, c_u in inv_tw.items():
+                result[u] = result.get(u, 0) + coeff_bar * c_u
+        return {k: sp.expand(vv) for k, vv in result.items() if vv != 0}
+
+    def is_bar_invariant(self, element):
+        return self.bar_element(element) == {
+            k: sp.expand(vv) for k, vv in element.items() if vv != 0
+        }
+
+    def pretty_print_element(self, element, label=None):
+        if not element:
+            print(f"{label} 0" if label else "0")
+            return
+        terms = []
+        for w in sorted(element, key=tuple):
+            coeff = sp.expand(element[w])
+            if coeff == 0:
+                continue
+            terms.append(f"({self.format_laurent(coeff)}) T_{w}")
+        content = " + ".join(terms) if terms else "0"
+        print(f"{label} {content}" if label else content)
+
+    def kl_polynomial(self, x, y, cache):
+        if x == y:
+            return sp.Integer(1)
+        if not is_bruhat_leq(x, y):
+            return sp.Integer(0)
+        key = (x, y)
+        if key in cache:
+            return cache[key]
+        for s in self.simple_reflections():
+            sy = permutation_prod(s, y)
+            if self.length(sy) < self.length(y):
+                sx = permutation_prod(s, x)
+                if self.length(sx) < self.length(x):
+                    value = self.kl_polynomial(sx, sy, cache)
+                else:
+                    value = q * self.kl_polynomial(sx, sy, cache)
+                    value += (q - 1) * self.kl_polynomial(x, sy, cache)
+                    for z in cache["perms"]:
+                        if z == x or z == sy:
+                            continue
+                        if not is_bruhat_leq(x, z) or not is_bruhat_leq(z, sy):
+                            continue
+                        sz = permutation_prod(s, z)
+                        if self.length(sz) >= self.length(z):
+                            continue
+                        diff = self.length(sy) - self.length(z) - 1
+                        if diff < 0 or diff % 2 != 0:
+                            continue
+                        deg = diff // 2
+                        p_z_sy = self.kl_polynomial(z, sy, cache)
+                        mu = sp.Poly(p_z_sy, v).coeff_monomial(v ** (2 * deg))
+                        if mu != 0:
+                            value -= mu * self.kl_polynomial(x, z, cache)
+                cache[key] = sp.simplify(value)
+                return cache[key]
+        raise ValueError("No descent found to apply KL recursion")
+
+    def kl_polynomials(self):
+        perms = list(generate_permutations(self.n))
+        cache = {"perms": perms}
+        kl = {}
+        for y in sorted(perms, key=self.length):
+            for x in perms:
+                if is_bruhat_leq(x, y):
+                    kl[(x, y)] = self.kl_polynomial(x, y, cache)
+        return kl
+
+    def canonical_basis(self):
+        perms = list(generate_permutations(self.n))
+        cache = {"perms": perms}
+        basis = {}
+        for w in perms:
+            coeffs = {}
+            for x in perms:
+                if not is_bruhat_leq(x, w):
+                    continue
+                p_xw = self.kl_polynomial(x, w, cache)
+                d = self.length(w) - self.length(x)
+                coeff = (-1) ** d * v ** d * p_xw.subs(v, v ** -1)
+                coeffs[x] = sp.expand(coeff)
+            basis[w] = HeckeElement(self, coeffs)
+        return basis
+
+    def T(self, w):
+        return HeckeElement(self, {tuple(w): sp.Integer(1)})
 
 if __name__ == "__main__":
     import sys
     import time
+    import doctest
 
     if len(sys.argv) < 2:
         raise SystemExit("Usage: python HeckeA.py <n>")
     n = int(sys.argv[1])
+    doctest.testmod()
+    algebra = HeckeA(n)
     start = time.perf_counter()
-    kl = kl_polynomials(n)
-    basis = canonical_basis(n)
+    kl = algebra.kl_polynomials()
+    basis = algebra.canonical_basis()
     elapsed = time.perf_counter() - start
     print(f"Computed KL polynomials for S_{n} (total {len(kl)} pairs).")
     for w in sorted(basis, key=tuple):
-        pretty_print_element(basis[w], label=f"C_{w} =")
+        basis[w].pretty(label=f"C_{w} =")
     perms = list(generate_permutations(n))
-    all_bar = all(is_bar_invariant(basis[w], n) for w in perms)
+    all_bar = all(basis[w].is_bar_invariant() for w in perms)
     print(f"Canonical basis bar-invariant: {all_bar}")
     print(f"Total computation time: {elapsed:.3f}s")
