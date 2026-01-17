@@ -3,6 +3,7 @@ from itertools import chain
 
 from RB import (
     generate_all_w_sigma_pairs,
+    dim_Omega_w_sigma,
     root_type1,
     root_type2,
 )
@@ -25,9 +26,11 @@ def node_label(w, sigma):
         color = "red" if idx in sigma else "blue"
         entries.append(f'<FONT COLOR="{color}">{val}</FONT>')
     w_label = "[" + ",".join(entries) + "]"
+    dim_label = f"{dim_Omega_w_sigma(w, sigma)}"
     return (
         "<<TABLE BORDER=\"0\" CELLBORDER=\"0\" CELLSPACING=\"0\">"
         f"<TR><TD>{w_label}</TD></TR>"
+        f"<TR><TD>{dim_label}</TD></TR>"
         "</TABLE>>"
     )
 

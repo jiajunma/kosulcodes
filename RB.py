@@ -384,6 +384,25 @@ def root_type2(w, sigma):
 
     return result
 
+
+def dim_Omega_w_beta(w, beta):
+    """
+    Compute the dimension of the orbit of (w, beta).
+
+    Formula: N(N-1)/2 + l(w) + |beta|
+    """
+    n = len(w)
+    return n * (n - 1) // 2 + length_of_permutation(w) + len(beta)
+
+def dim_Omega_w_sigma(w, sigma):
+    """
+    Compute the dimension of the orbit of (w, sigma) 
+    This is the same as the dimension of the orbit of (w, beta), but one computes beta from sigma first.
+    Formula: N(N-1)/2 + l(w) + |beta|
+    """
+    beta = sigma_to_beta(w, sigma)
+    return dim_Omega_w_beta(w, beta)
+
 def pretty_print_root_type_results(w, sigma, root_type_func):
     """
     Nicely print the output of root_type1 or root_type2 for a given (w, sigma).
