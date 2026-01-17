@@ -1,4 +1,9 @@
-from RB import generate_permutations, generate_all_beta, str_colored_partition
+from RB import (
+    generate_permutations,
+    generate_all_beta,
+    sigma_to_beta,
+    str_colored_partition,
+)
 
 
 AT = "@" 
@@ -58,6 +63,22 @@ def shape(tableau):
     return [len(row) for row in tableau]
 
 
+def tableau_to_string(tableau):
+    """
+    Format a tableau as a labeled Young diagram.
+    """
+    if not tableau:
+        return "(empty)"
+    width = max(len(str(x)) for row in tableau for x in row)
+    return "\n".join(" ".join(f"{x:>{width}}" for x in row) for row in tableau)
+
+
+def print_tableau(tableau, label=None):
+    if label:
+        print(label)
+    print(tableau_to_string(tableau))
+
+
 def strip_at(tableau):
     stripped = []
     for row in tableau:
@@ -108,8 +129,13 @@ def mirabolic_rsk(w, beta):
         "T2": T2,
         "nu": nu,
         "theta": theta,
-        "nu_prime": nu_prime,
+        "nu'": nu_prime,
     }
+
+
+def mirabolic_rsk_from_sigma(w, sigma):
+    beta = sigma_to_beta(w, sigma)
+    return mirabolic_rsk(w, beta)
 
 
 def generate_all_w_beta_pairs(n):
@@ -127,7 +153,11 @@ def test_all_rb(n, verbose=1):
             print("w,beta =", str_colored_partition(w, beta))
             print("nu =", result["nu"])
             print("theta =", result["theta"])
-            print("nu_prime =", result["nu_prime"])
+            print("nu' =", result["nu'"])
+            if verbose > 3:
+                print_tableau(result["T_at"], label="T_at:")
+                print_tableau(result["T1"], label="T1:")
+                print_tableau(result["T2"], label="T2:")
             print("-" * 30)
     print(f"Total RB pairs for n={n}: {count}")
 
@@ -136,7 +166,47 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) < 2:
-        raise SystemExit("Usage: python MRSK.py <n> [verbose]")
-    n = int(sys.argv[1])
-    verbose = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-    test_all_rb(n, verbose)
+        raise SystemExit(
+            "Usage:\n"
+            "  python MRSK.py <n> [verbose]\n"
+            "  python MRSK.py wbeta \"(w1,w2,...)\" \"{i,j,...}\"\n"
+            "  python MRSK.py wsigma \"(w1,w2,...)\" \"{i,j,...}\""
+        )
+    if sys.argv[1] == "wbeta":
+        if len(sys.argv) != 4:
+            raise SystemExit("Usage: python MRSK.py wbeta \"(w1,w2,...)\" \"{i,j,...}\"")
+        w = eval(sys.argv[2], {"__builtins__": {}})
+        beta = eval(sys.argv[3], {"__builtins__": {}})
+        if not isinstance(w, tuple):
+            raise SystemExit("wbeta expects a tuple for w, e.g. \"(3,1,4,2)\"")
+        if not isinstance(beta, set):
+            raise SystemExit("wbeta expects a set for beta, e.g. \"{1,3}\"")
+        result = mirabolic_rsk(w, beta)
+        print("w,beta =", str_colored_partition(w, beta))
+        print("nu =", result["nu"])
+        print("theta =", result["theta"])
+        print("nu' =", result["nu'"])
+        print_tableau(result["T_at"], label="T_at:")
+        print_tableau(result["T1"], label="T1:")
+        print_tableau(result["T2"], label="T2:")
+    elif sys.argv[1] == "wsigma":
+        if len(sys.argv) != 4:
+            raise SystemExit("Usage: python MRSK.py wsigma \"(w1,w2,...)\" \"{i,j,...}\"")
+        w = eval(sys.argv[2], {"__builtins__": {}})
+        sigma = eval(sys.argv[3], {"__builtins__": {}})
+        if not isinstance(w, tuple):
+            raise SystemExit("wsigma expects a tuple for w, e.g. \"(3,1,4,2)\"")
+        if not isinstance(sigma, set):
+            raise SystemExit("wsigma expects a set for sigma, e.g. \"{1,3}\"")
+        result = mirabolic_rsk_from_sigma(w, sigma)
+        print("w,sigma =", str_colored_partition(w, sigma))
+        print("nu =", result["nu"])
+        print("theta =", result["theta"])
+        print("nu' =", result["nu'"])
+        print_tableau(result["T_at"], label="T_at:")
+        print_tableau(result["T1"], label="T1:")
+        print_tableau(result["T2"], label="T2:")
+    else:
+        n = int(sys.argv[1])
+        verbose = int(sys.argv[2]) if len(sys.argv) > 2 else 1
+        test_all_rb(n, verbose)
