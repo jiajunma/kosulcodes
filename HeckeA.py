@@ -146,11 +146,11 @@ class HeckeA:
                 pieces.append(f"{coeff_str}")
                 continue
             if coeff == 1:
-                base = f"{var}" if exp == 1 else f"{var}**{exp}"
+                base = f"{var}" if exp == 1 else f"{var}^{{{exp}}}"
             elif coeff == -1:
-                base = f"-{var}" if exp == 1 else f"-{var}**{exp}"
+                base = f"-{var}" if exp == 1 else f"-{var}^{{{exp}}}"
             else:
-                base = f"{coeff_str}*{var}" if exp == 1 else f"{coeff_str}*{var}**{exp}"
+                base = f"{coeff_str}*{var}" if exp == 1 else f"{coeff_str}*{var}^{{{exp}}}"
             pieces.append(base)
         return " + ".join(pieces).replace("+ -", "- ")
 
@@ -192,12 +192,10 @@ class HeckeA:
             inv_tw = self.inverse_T_w(w_inv)
             for u, c_u in inv_tw.items():
                 result[u] = result.get(u, 0) + coeff_bar * c_u
-        return {k: sp.expand(vv) for k, vv in result.items() if vv != 0}
+        return self.regular_coefficient(result)
 
     def is_bar_invariant(self, element):
-        return self.bar_element(element) == {
-            k: sp.expand(vv) for k, vv in element.items() if vv != 0
-        }
+        return self.is_equal(self.bar_element(element), element)
 
     def pretty_print_element(self, element, label=None):
         if not element:
@@ -296,6 +294,10 @@ if __name__ == "__main__":
     for w in sorted(basis, key=tuple):
         basis[w].pretty(label=f"C_{w} =")
     perms = list(generate_permutations(n))
-    all_bar = all(basis[w].is_bar_invariant() for w in perms)
+    all_bar = True
+    for w in perms:
+        if not basis[w].is_bar_invariant():
+            print(f"Element C_{w} is not bar-invariant.")
+            all_bar = False
     print(f"Canonical basis bar-invariant: {all_bar}")
     print(f"Total computation time: {elapsed:.3f}s")

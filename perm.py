@@ -222,14 +222,13 @@ def reduced_word(w):
     return word
 
 
-    # INSERT_YOUR_CODE
 def is_bruhat_leq(u, v):
     """
     Decide whether permutation u is <= v in the (strong) Bruhat order.
 
-    This uses the subword criterion for the Bruhat order:
-    For all 1 <= i <= j <= n, the number of elements <= i in the initial segment u[:j]
-    is at least as large as the number of such elements in v[:j].
+    This uses the rank-matrix criterion:
+    For all i,j in [n], define x[i,j] = |{a <= i : x(a) >= j}|.
+    Then u <= v iff u[i,j] <= v[i,j] for all i,j.
 
     Args:
         u: Permutation as a tuple or list, length n.
@@ -247,11 +246,11 @@ def is_bruhat_leq(u, v):
         False
     """
     n = len(u)
-    for j in range(1, n+1):
-        for i in range(1, n+1):
-            u_count = sum(1 for x in u[:j] if x <= i)
-            v_count = sum(1 for x in v[:j] if x <= i)
-            if u_count < v_count:
+    for i in range(1, n + 1):
+        for j in range(1, n + 1):
+            u_count = sum(1 for x in u[:i] if x >= j)
+            v_count = sum(1 for x in v[:i] if x >= j)
+            if u_count > v_count:
                 return False
     return True
 

@@ -1,32 +1,35 @@
 from graphviz import Digraph
 
-from perm import generate_permutations, length_of_permutation
+from perm import generate_permutations, is_bruhat_leq, length_of_permutation
 
 
-def bruhat_covers(n):
+def bruhat_downset(n):
     """
-    Generate cover relations u -> v in the Bruhat order on S_n.
-
-    A cover is given by v = u * t where t is a reflection (a,b) and
-    length(v) = length(u) + 1. In complete notation, this means:
-    pick positions a < b with u(a) < u(b), and swap the entries at those
-    positions to form v.
-
-    Returns:
-        A list of (u, v, (a, b)) tuples, each u and v are permutation tuples.
+    Compute Bruhat downsets using the rank-matrix criterion.
     """
-    covers = []
-    for u in generate_permutations(n):
-        lu = length_of_permutation(u)
-        for a in range(1, n):
-            for b in range(a + 1, n + 1):
-                if u[a - 1] < u[b - 1]:
-                    v_list = list(u)
-                    v_list[a - 1], v_list[b - 1] = v_list[b - 1], v_list[a - 1]
-                    v = tuple(v_list)
-                    if length_of_permutation(v) == lu + 1:
-                        covers.append((u, v, (a, b)))
-    return covers
+    perms = list(generate_permutations(n))
+    downset = {w: set() for w in perms}
+    for u in perms:
+        for v in perms:
+            if is_bruhat_leq(u, v):
+                downset[v].add(u)
+    return downset
+
+
+def bruhat_hasse_edges(n):
+    """
+    Compute Hasse edges from Bruhat downsets by deleting transitive edges.
+    """
+    downset = bruhat_downset(n)
+    edges = set()
+    for x in downset:
+        candidates = set(downset[x])
+        candidates.discard(x)
+        for z in list(candidates):
+            candidates.difference_update(downset[z] - {z})
+        for y in candidates:
+            edges.add((x, y))
+    return edges
 
 
 def permutation_label(w):
@@ -64,8 +67,7 @@ def hasse_diagram_bruhat(n, output_path):
             for w in group:
                 s.node(permutation_label(w))
 
-    for u, v, t in bruhat_covers(n):
-        a, b = t
+    for u, v in bruhat_hasse_edges(n):
         dot.edge(permutation_label(u), permutation_label(v))
 
     dot.render(output_path, format="svg", cleanup=True)
