@@ -29,7 +29,7 @@ def simple_reflections(n):
 _mul_simple_cache = {}
 
 
-def hecke_multiply_by_simple(element, s, lengths=length):
+def hecke_multiply_by_simple(element, s):
     """
     Left-multiply a Hecke algebra element by a simple reflection s.
 
@@ -41,7 +41,7 @@ def hecke_multiply_by_simple(element, s, lengths=length):
     result = {}
     for w, coeff in element.items():
         sw = permutation_prod(s, w)
-        if lengths(sw) > lengths(w):
+        if length(sw) > length(w):
             result[sw] = result.get(sw, 0) + coeff
         else:
             # When the simple reflection s acts on T_w and lengths(sw) < lengths(w), the Hecke relation is
@@ -54,7 +54,7 @@ def hecke_multiply_by_simple(element, s, lengths=length):
     return result
 
 
-def hecke_multiply_by_simple_inverse(element, s, lengths=length):
+def hecke_multiply_by_simple_inverse(element, s):
     """
     Left-multiply by T_s^{-1} where T_s^{-1} = q^{-1} T_s + (q^{-1} - 1).
     """
