@@ -34,7 +34,7 @@ def bruhat_hasse_edges(n):
 
 def permutation_label(w):
     """Readable label for a permutation tuple."""
-    return "[" + ",".join(str(x) for x in w) + "]"
+    return "".join(str(x) for x in w)
 
 
 def hasse_diagram_bruhat(n, output_path):
@@ -49,23 +49,26 @@ def hasse_diagram_bruhat(n, output_path):
         The Graphviz Digraph object.
     """
     dot = Digraph(comment=f"Bruhat order Hasse diagram for S_{n}")
-    dot.attr(splines="false" )
-    dot.attr("node", shape="box", fontsize="10")
+    dot.attr(splines="false")
+    dot.attr("node", shape="box", fontsize="12")
     dot.attr("edge", fontsize="9", arrowhead="none")
 
     perms = list(generate_permutations(n))
     for w in perms:
         dot.node(permutation_label(w))
 
-    # Group nodes by length to keep ranks aligned (more symmetric layout).
+    # Group nodes by length to keep ranks aligned and roughly centered.
     by_length = {}
     for w in perms:
         by_length.setdefault(length_of_permutation(w), []).append(w)
     for length, group in sorted(by_length.items()):
         with dot.subgraph() as s:
             s.attr(rank="same")
+            center_id = f"rank_{length}_center"
+            s.node(center_id, label="", shape="point", width="0.01", height="0.01", style="invis")
             for w in group:
                 s.node(permutation_label(w))
+                s.edge(center_id, permutation_label(w), style="invis")
 
     for u, v in bruhat_hasse_edges(n):
         dot.edge(permutation_label(u), permutation_label(v))
@@ -83,3 +86,4 @@ if __name__ == "__main__":
     n = int(sys.argv[1])
     out_path = sys.argv[2]
     hasse_diagram_bruhat(n, out_path)
+

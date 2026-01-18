@@ -245,13 +245,22 @@ def is_bruhat_leq(u, v):
         >>> is_bruhat_leq((3,1,2), (2,3,1))
         False
     """
+    key = (tuple(u), tuple(v))
+    cache = getattr(is_bruhat_leq, "_cache", None)
+    if cache is None:
+        cache = {}
+        setattr(is_bruhat_leq, "_cache", cache)
+    if key in cache:
+        return cache[key]
     n = len(u)
     for i in range(1, n + 1):
         for j in range(1, n + 1):
             u_count = sum(1 for x in u[:i] if x >= j)
             v_count = sum(1 for x in v[:i] if x >= j)
             if u_count > v_count:
+                cache[key] = False
                 return False
+    cache[key] = True
     return True
 
 

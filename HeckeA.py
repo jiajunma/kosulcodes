@@ -57,6 +57,9 @@ class HeckeA:
         self._mul_simple_cache = {}
         self._tw_tu_cache = {}
         self._inverse_cache = {}
+        self._kl_cache = None
+        self._mu_cache = {}
+        self._perms = list(generate_permutations(n))
 
     def length(self, w):
         if w not in self._length_cache:
@@ -210,65 +213,91 @@ class HeckeA:
         content = " + ".join(terms) if terms else "0"
         print(f"{label} {content}" if label else content)
 
-    def kl_polynomial(self, x, y, cache):
-        if x == y:
-            return sp.Integer(1)
-        if not is_bruhat_leq(x, y):
-            return sp.Integer(0)
+    def kl_polynomial(self, x, y, cache=None):
+        if cache is None:
+            if self._kl_cache is None:
+                self._kl_cache = {}
+            cache = self._kl_cache
         key = (x, y)
         if key in cache:
             return cache[key]
-        for s in self.simple_reflections():
+        elif x == y:
+            cache[key] = sp.Integer(1)
+        elif not is_bruhat_leq(x, y):
+            cache[key] = sp.Integer(0)
+
+        elif self.length(y) - self.length(x) <= 2:
+            cache[key] = sp.Integer(1)
+        # If no tricks work, do the recursive computation 
+        else:
+          for s in self.simple_reflections():
             sy = permutation_prod(s, y)
             if self.length(sy) < self.length(y):
                 sx = permutation_prod(s, x)
-                if self.length(sx) < self.length(x):
-                    value = self.kl_polynomial(sx, sy, cache)
-                else:
-                    value = q * self.kl_polynomial(sx, sy, cache)
-                    value += (q - 1) * self.kl_polynomial(x, sy, cache)
-                    for z in cache["perms"]:
-                        if z == x or z == sy:
-                            continue
-                        if not is_bruhat_leq(x, z) or not is_bruhat_leq(z, sy):
-                            continue
-                        sz = permutation_prod(s, z)
-                        if self.length(sz) >= self.length(z):
-                            continue
-                        diff = self.length(sy) - self.length(z) - 1
-                        if diff < 0 or diff % 2 != 0:
-                            continue
-                        deg = diff // 2
-                        p_z_sy = self.kl_polynomial(z, sy, cache)
-                        mu = sp.Poly(p_z_sy, v).coeff_monomial(v ** (2 * deg))
-                        if mu != 0:
-                            value -= mu * self.kl_polynomial(x, z, cache)
+                c = 0 if self.length(sx) > self.length(x) else 1
+                term1 = (q ** (1 - c)) * self.kl_polynomial(sx, y, cache)
+                term2 = (q ** c) * self.kl_polynomial(x, sy, cache)
+                sum_term = sp.Integer(0)
+                for z in self._perms:
+                    if z == sy:
+                        continue
+                    if not is_bruhat_leq(x, z) or not is_bruhat_leq(z, sy):
+                        continue
+                    sz = permutation_prod(s, z)
+                    if self.length(sz) >= self.length(z):
+                        continue
+                    mu = self.mu_coefficient(z, sy)
+                    if mu != 0:
+                        sum_term += mu * (v ** (self.length(z) - self.length(y))) * self.kl_polynomial(x, z, cache)
+                value = term1 + term2 - sum_term
                 cache[key] = sp.simplify(value)
+                self._set_mu_cache_from_kl(x, y, cache[key])
                 return cache[key]
-        raise ValueError("No descent found to apply KL recursion")
+        self._set_mu_cache_from_kl(x, y, cache[key])
+        return cache[key]
+
+    def mu_coefficient(self, x, y):
+        """
+        Return mu(x,y), the top-degree coefficient of the KL polynomial.
+        """
+        key = (x, y)
+        if key in self._mu_cache:
+            return self._mu_cache[key]
+        p_xy = self.kl_polynomial(x, y)
+        return self._set_mu_cache_from_kl(x, y, p_xy)
+
+    def _set_mu_cache_from_kl(self, x, y, p_xy):
+        key = (x, y)
+        d = self.length(y) - self.length(x)
+        if d <= 0 or d % 2 == 0 or not is_bruhat_leq(x, y):
+            self._mu_cache[key] = sp.Integer(0)
+            return self._mu_cache[key]
+        deg = (d - 1) // 2
+        mu = sp.Poly(sp.expand(p_xy * v ** (2 * deg)), v).coeff_monomial(v ** 0)
+        self._mu_cache[key] = mu
+        return mu
 
     def kl_polynomials(self):
-        perms = list(generate_permutations(self.n))
-        cache = {"perms": perms}
-        kl = {}
-        for y in sorted(perms, key=self.length):
-            for x in perms:
-                if is_bruhat_leq(x, y):
-                    kl[(x, y)] = self.kl_polynomial(x, y, cache)
-        return kl
+        if self._kl_cache is None:
+            kl = {}
+            for y in sorted(self._perms, key=self.length):
+                for x in self._perms:
+                    if is_bruhat_leq(x, y):
+                        kl[(x, y)] = self.kl_polynomial(x, y)
+            self._kl_cache = kl
+        return self._kl_cache
 
     def canonical_basis(self):
-        perms = list(generate_permutations(self.n))
-        cache = {"perms": perms}
         basis = {}
-        for w in perms:
+        for w in self._perms:
             coeffs = {}
-            for x in perms:
+            for x in self._perms:
                 if not is_bruhat_leq(x, w):
                     continue
-                p_xw = self.kl_polynomial(x, w, cache)
-                d = self.length(w) - self.length(x)
-                coeff = (-1) ** d * v ** d * p_xw.subs(v, v ** -1)
+                p_xw = self.kl_polynomial(x, w)
+                d1 = self.length(w) - self.length(x)
+                d2 = self.length(w) - 2*self.length(x)
+                coeff = (-1) ** d1 * (v ** d2) * p_xw.subs(v, v ** -1)
                 coeffs[x] = sp.expand(coeff)
             basis[w] = HeckeElement(self, coeffs)
         return basis
