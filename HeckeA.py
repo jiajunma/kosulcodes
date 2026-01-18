@@ -49,6 +49,13 @@ class HeckeElement:
     def pretty(self, label=None):
         self.algebra.pretty_print_element(self.coeffs, label=label)
 
+    def specialize(self, q_value):
+        """
+        Specialize v to a numeric value (q_value) and return coefficients.
+        """
+        coeffs = {k: sp.expand(vv.subs(v, q_value)) for k, vv in self.coeffs.items()}
+        return {k: vv for k, vv in coeffs.items() if vv != 0}
+
 
 class HeckeA:
     def __init__(self, n):
