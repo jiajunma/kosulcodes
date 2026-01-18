@@ -231,6 +231,31 @@ def sigma_to_beta(w, sigma):
     assert is_beta_on_subset(w, beta), f"Beta {beta} does not satisfy the beta condition on w={w}"
     return beta
 
+
+def tilde_inverse(w, beta):
+    """
+    Return (w^{-1}, w(beta)) for w~ = (w, beta).
+    """
+    w_inv = inverse_permutation(w)
+    beta_img = {w[i - 1] for i in beta}
+    return w_inv, beta_img
+
+
+def right_action_rb(wtilde, x):
+    """
+    Right action of x in S_n on (w, beta): (w x, x(beta)).
+
+    For simple reflection the action is given by:
+    (w, beta) s  :=  (w s, s(beta))
+
+    For general elements the action is given by:
+    (w, beta) g  :=  (w g, g^{-1}(beta))
+
+    """
+    w, beta = wtilde
+    x_inv = inverse_permutation(x)
+    return permutation_prod(w, x), {x_inv[i - 1] for i in beta}
+
 def root_type1(w, sigma):
     """
     Determine the root type for each simple reflection s_i in S_1 

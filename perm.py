@@ -192,6 +192,28 @@ def left_descent_set(w):
     """
     return right_descent_set(inverse_permutation(w))
 
+def right_descending_element(w):
+    """
+    Return an element of the right descending set of w.
+
+    Args:
+        w: A permutation tuple or list.
+
+    Returns:
+        An integer in the right descending set of w, or None if w is the identity permutation.
+
+    Examples:
+        >>> right_descending_element((3, 1, 2))
+        1
+        >>> right_descending_element((1, 3, 2))
+        2
+        >>> right_descending_element((1, 2, 3))
+    """
+    n = len(w)
+    for j in range(n - 1):
+        if w[j] > w[j + 1]:
+            return j+1
+    return None
 
 def reduced_word(w):
     """
