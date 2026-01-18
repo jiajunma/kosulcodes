@@ -213,21 +213,16 @@ class HeckeA:
         content = " + ".join(terms) if terms else "0"
         print(f"{label} {content}" if label else content)
 
-    def kl_polynomial(self, x, y, cache=None):
-        if cache is None:
-            if self._kl_cache is None:
-                self._kl_cache = {}
-            cache = self._kl_cache
+    def kl_polynomial(self, x, y):
         key = (x, y)
-        if key in cache:
-            return cache[key]
+        if key in self._kl_cache:
+            return self._kl_cache[key]
         elif x == y:
-            cache[key] = sp.Integer(1)
+            self._kl_cache[key] = sp.Integer(1)
         elif not is_bruhat_leq(x, y):
-            cache[key] = sp.Integer(0)
-
+            self._kl_cache[key] = sp.Integer(0)
         elif self.length(y) - self.length(x) <= 2:
-            cache[key] = sp.Integer(1)
+            self._kl_cache[key] = sp.Integer(1)
         # If no tricks work, do the recursive computation 
         else:
           for s in self.simple_reflections():
@@ -235,8 +230,8 @@ class HeckeA:
             if self.length(sy) < self.length(y):
                 sx = permutation_prod(s, x)
                 c = 0 if self.length(sx) > self.length(x) else 1
-                term1 = (q ** (1 - c)) * self.kl_polynomial(sx, y, cache)
-                term2 = (q ** c) * self.kl_polynomial(x, sy, cache)
+                term1 = (q ** (1 - c)) * self.kl_polynomial(sx, y)
+                term2 = (q ** c) * self.kl_polynomial(x, sy)
                 sum_term = sp.Integer(0)
                 for z in self._perms:
                     if z == sy:
@@ -248,13 +243,13 @@ class HeckeA:
                         continue
                     mu = self.mu_coefficient(z, sy)
                     if mu != 0:
-                        sum_term += mu * (v ** (self.length(z) - self.length(y))) * self.kl_polynomial(x, z, cache)
+                        sum_term += mu * (v ** (self.length(z) - self.length(y))) * self.kl_polynomial(x, z)
                 value = term1 + term2 - sum_term
-                cache[key] = sp.simplify(value)
-                self._set_mu_cache_from_kl(x, y, cache[key])
-                return cache[key]
-        self._set_mu_cache_from_kl(x, y, cache[key])
-        return cache[key]
+                self._kl_cache[key] = sp.simplify(value)
+                self._set_mu_cache_from_kl(x, y, self._kl_cache[key])
+                return self._kl_cache[key]
+        self._set_mu_cache_from_kl(x, y, self._kl_cache[key])
+        return self._kl_cache[key]
 
     def mu_coefficient(self, x, y):
         """
