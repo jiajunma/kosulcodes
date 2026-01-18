@@ -214,6 +214,8 @@ class HeckeA:
         print(f"{label} {content}" if label else content)
 
     def kl_polynomial(self, x, y):
+        if self._kl_cache is None:
+            self._kl_cache = {}
         key = (x, y)
         if key in self._kl_cache:
             return self._kl_cache[key]
@@ -225,29 +227,28 @@ class HeckeA:
             self._kl_cache[key] = sp.Integer(1)
         # If no tricks work, do the recursive computation 
         else:
-          for s in self.simple_reflections():
-            sy = permutation_prod(s, y)
-            if self.length(sy) < self.length(y):
-                sx = permutation_prod(s, x)
-                c = 0 if self.length(sx) > self.length(x) else 1
-                term1 = (q ** (1 - c)) * self.kl_polynomial(sx, y)
-                term2 = (q ** c) * self.kl_polynomial(x, sy)
-                sum_term = sp.Integer(0)
-                for z in self._perms:
-                    if z == sy:
-                        continue
-                    if not is_bruhat_leq(x, z) or not is_bruhat_leq(z, sy):
-                        continue
-                    sz = permutation_prod(s, z)
-                    if self.length(sz) >= self.length(z):
-                        continue
-                    mu = self.mu_coefficient(z, sy)
-                    if mu != 0:
-                        sum_term += mu * (v ** (self.length(z) - self.length(y))) * self.kl_polynomial(x, z)
-                value = term1 + term2 - sum_term
-                self._kl_cache[key] = sp.simplify(value)
-                self._set_mu_cache_from_kl(x, y, self._kl_cache[key])
-                return self._kl_cache[key]
+            for s in self.simple_reflections():
+                # Here y = w and sy = v in Humphreys' book (Section 7.11)
+                sy = permutation_prod(s, y)
+                if self.length(sy) < self.length(y):
+                    sx = permutation_prod(s, x)
+                    c = 0 if self.length(sx) > self.length(x) else 1
+                    term1 = (q ** (1 - c)) * self.kl_polynomial(sx, sy)
+                    term2 = (q ** c) * self.kl_polynomial(x, sy)
+                    sum_term = sp.Integer(0) 
+                    for z in self._perms:
+                        if not is_bruhat_leq(x, z) or not is_bruhat_leq(z, sy):
+                            continue
+                        sz = permutation_prod(s, z)
+                        if self.length(sz) >= self.length(z):
+                            continue
+                        mu = self.mu_coefficient(z, sy)
+                        if mu != 0:
+                            sum_term += mu * (v ** (- self.length(z) + self.length(y))) * self.kl_polynomial(x, z)
+                    value = term1 + term2 - sum_term
+                    self._kl_cache[key] = sp.simplify(value)
+                    self._set_mu_cache_from_kl(x, y, self._kl_cache[key])
+                    return self._kl_cache[key]
         self._set_mu_cache_from_kl(x, y, self._kl_cache[key])
         return self._kl_cache[key]
 
@@ -313,11 +314,11 @@ if __name__ == "__main__":
     start = time.perf_counter()
     kl = algebra.kl_polynomials()
     basis = algebra.canonical_basis()
-    elapsed = time.perf_counter() - start
     print(f"Computed KL polynomials for S_{n} (total {len(kl)} pairs).")
     for w in sorted(basis, key=tuple):
         basis[w].pretty(label=f"C_{w} =")
     perms = list(generate_permutations(n))
+    elapsed = time.perf_counter() - start
     all_bar = True
     for w in perms:
         if not basis[w].is_bar_invariant():
