@@ -216,13 +216,89 @@ class WGraph:
                     row += f"{mu:3d}"
             print(row)
     
-    def generate_dot(self, show_descents=True, rankdir="TB"):
+    def get_beta_color(self, beta):
+        """
+        Get color for a painted partition β.
+        
+        Colors are assigned based on |β| (size of painted set):
+        - |β| = 0: white/light gray
+        - |β| = 1: light blue
+        - |β| = 2: light green  
+        - |β| = 3: light yellow
+        - |β| = 4: light orange
+        - |β| = n: light red
+        
+        Returns:
+            tuple: (fillcolor, fontcolor) for DOT
+        """
+        size = len(beta)
+        
+        # Color palette based on |β|
+        colors = [
+            ("#ffffff", "#000000"),  # 0: white
+            ("#cce5ff", "#000000"),  # 1: light blue
+            ("#d4edda", "#000000"),  # 2: light green
+            ("#fff3cd", "#000000"),  # 3: light yellow
+            ("#ffe5cc", "#000000"),  # 4: light orange
+            ("#ffcccc", "#000000"),  # 5: light red
+            ("#e5ccff", "#000000"),  # 6: light purple
+            ("#ccffff", "#000000"),  # 7: light cyan
+        ]
+        
+        if size < len(colors):
+            return colors[size]
+        return colors[-1]
+    
+    def get_beta_color_by_pattern(self, beta, n):
+        """
+        Get color for painted partition based on specific pattern.
+        
+        Different colors for different β patterns to distinguish
+        similar sized partitions.
+        """
+        beta_tuple = tuple(sorted(beta))
+        
+        # Define a color map for specific patterns
+        # Using HSL-based colors for better distinction
+        pattern_colors = {
+            # n=2
+            (): "#f0f0f0",           # empty: light gray
+            (1,): "#a8d5e2",         # {1}: light blue
+            (2,): "#95d5b2",         # {2}: light green  
+            (1, 2): "#ffd6a5",       # {1,2}: light orange
+            
+            # n=3 additional
+            (3,): "#f4a261",         # {3}: orange
+            (1, 2): "#ffd6a5",       # {1,2}: light orange
+            (1, 3): "#e9c46a",       # {1,3}: gold
+            (2, 3): "#98c1d9",       # {2,3}: steel blue
+            (1, 2, 3): "#ffb5a7",    # {1,2,3}: salmon
+            
+            # n=4 additional
+            (4,): "#d4a5a5",         # {4}: dusty rose
+            (1, 4): "#b5838d",       # {1,4}: mauve
+            (2, 4): "#6d6875",       # {2,4}: gray purple
+            (3, 4): "#b5e48c",       # {3,4}: lime
+            (1, 2, 4): "#99d98c",    # {1,2,4}: green
+            (1, 3, 4): "#76c893",    # {1,3,4}: seafoam
+            (2, 3, 4): "#52b788",    # {2,3,4}: teal
+            (1, 2, 3, 4): "#ee6c4d", # {1,2,3,4}: coral
+        }
+        
+        if beta_tuple in pattern_colors:
+            return (pattern_colors[beta_tuple], "#000000")
+        
+        # Fallback based on size
+        return self.get_beta_color(beta)
+
+    def generate_dot(self, show_descents=True, rankdir="TB", color_by_beta=True):
         """
         Generate DOT format for Graphviz visualization.
         
         Args:
             show_descents: include descent sets in labels
             rankdir: graph direction (TB=top-bottom, LR=left-right)
+            color_by_beta: color nodes by painted partition β
         
         Returns:
             str: DOT format string
@@ -233,9 +309,31 @@ class WGraph:
         lines = []
         lines.append(f'digraph WGraph_n{self.n} {{')
         lines.append(f'    rankdir={rankdir};')
-        lines.append('    node [shape=box, fontname="Courier"];')
+        lines.append('    node [shape=box, fontname="Courier", style=filled];')
         lines.append('    edge [fontname="Courier"];')
         lines.append('')
+        
+        # Add legend for colors
+        if color_by_beta:
+            lines.append('    // Legend')
+            lines.append('    subgraph cluster_legend {')
+            lines.append('        label="Painted partition |β|";')
+            lines.append('        style=solid;')
+            lines.append('        fontsize=12;')
+            
+            # Show color legend for each |β| size
+            seen_sizes = set()
+            for key in self._vertices:
+                _, beta = denormalize_key(key)
+                seen_sizes.add(len(beta))
+            
+            for size in sorted(seen_sizes):
+                dummy_beta = set(range(1, size + 1))
+                fillcolor, fontcolor = self.get_beta_color(dummy_beta)
+                lines.append(f'        legend_{size} [label="|β|={size}", fillcolor="{fillcolor}", fontcolor="{fontcolor}"];')
+            
+            lines.append('    }')
+            lines.append('')
         
         # Group vertices by length for ranking
         length_groups = {}
@@ -253,6 +351,7 @@ class WGraph:
             lines.append(f'        style=dashed;')
             
             for key in length_groups[ell]:
+                w, beta = denormalize_key(key)
                 node_id = self.vertex_id(key)
                 label = self.format_vertex_short(key)
                 
@@ -264,7 +363,12 @@ class WGraph:
                     else:
                         label += "\\nτ={}"
                 
-                lines.append(f'        {node_id} [label="{label}"];')
+                # Add color based on β
+                if color_by_beta:
+                    fillcolor, fontcolor = self.get_beta_color_by_pattern(beta, self.n)
+                    lines.append(f'        {node_id} [label="{label}", fillcolor="{fillcolor}", fontcolor="{fontcolor}"];')
+                else:
+                    lines.append(f'        {node_id} [label="{label}"];')
             
             lines.append('    }')
             lines.append('')
@@ -283,20 +387,20 @@ class WGraph:
         lines.append('}')
         return '\n'.join(lines)
     
-    def save_dot(self, filename):
+    def save_dot(self, filename, color_by_beta=True):
         """Save DOT format to file."""
-        dot = self.generate_dot()
+        dot = self.generate_dot(color_by_beta=color_by_beta)
         with open(filename, 'w') as f:
             f.write(dot)
         print(f"DOT file saved to: {filename}")
     
-    def save_svg(self, filename):
+    def save_svg(self, filename, color_by_beta=True):
         """
         Generate SVG using Graphviz.
         
         Requires graphviz to be installed (dot command).
         """
-        dot = self.generate_dot()
+        dot = self.generate_dot(color_by_beta=color_by_beta)
         
         try:
             result = subprocess.run(
@@ -321,6 +425,35 @@ class WGraph:
             print("  brew install graphviz  (macOS)")
             print("  apt install graphviz   (Ubuntu)")
             return False
+    
+    def print_painted_partitions(self):
+        """Print vertices grouped by painted partition β."""
+        print(f"\nPainted partitions β for W-graph (n={self.n})")
+        print("=" * 60)
+        
+        # Group by β
+        by_beta = {}
+        for key in self._vertices:
+            w, beta = denormalize_key(key)
+            beta_tuple = tuple(sorted(beta))
+            if beta_tuple not in by_beta:
+                by_beta[beta_tuple] = []
+            by_beta[beta_tuple].append(key)
+        
+        print("\nVertices grouped by painted partition:")
+        print("-" * 40)
+        
+        for beta_tuple in sorted(by_beta.keys(), key=lambda t: (len(t), t)):
+            beta_str = "{" + ",".join(str(i) for i in beta_tuple) + "}"
+            fillcolor, _ = self.get_beta_color(set(beta_tuple))
+            vertices = by_beta[beta_tuple]
+            
+            print(f"\n  β = {beta_str} (|β|={len(beta_tuple)}, color: {fillcolor}):")
+            for key in sorted(vertices, key=lambda k: self.R.ell_wtilde(*denormalize_key(k))):
+                w, beta = denormalize_key(key)
+                ell = self.R.ell_wtilde(w, beta)
+                w_str = "".join(str(x) for x in w)
+                print(f"    [{w_str}] (ℓ={ell})")
     
     def print_descent_sets(self):
         """Print descent sets for all vertices."""
@@ -366,9 +499,11 @@ def main():
         print("  options:")
         print("    --text      : text-based output (default)")
         print("    --descents  : show descent sets for each vertex")
+        print("    --painted   : show vertices grouped by painted partition β")
         print("    --matrix    : show adjacency matrix")
         print("    --dot       : output DOT format for Graphviz")
         print("    --svg       : generate SVG file (requires graphviz)")
+        print("    --nocolor   : disable color coding by β in DOT/SVG")
         print("    --all       : show all outputs")
         sys.exit(1)
     
@@ -376,38 +511,45 @@ def main():
     
     show_text = "--text" in sys.argv or len(sys.argv) == 2
     show_descents = "--descents" in sys.argv
+    show_painted = "--painted" in sys.argv
     show_matrix = "--matrix" in sys.argv
     show_dot = "--dot" in sys.argv
     show_svg = "--svg" in sys.argv
+    no_color = "--nocolor" in sys.argv
     show_all = "--all" in sys.argv
     
+    color_by_beta = not no_color
+    
     if show_all:
-        show_text = show_descents = show_matrix = show_dot = show_svg = True
+        show_text = show_descents = show_painted = show_matrix = show_dot = show_svg = True
     
     print(f"\n=== W-graph for HeckeRB bimodule (n={n}) ===")
     
     G = WGraph(n)
     
-    if show_text or (not show_descents and not show_matrix and not show_dot and not show_svg):
+    if show_text or (not show_descents and not show_painted and not show_matrix and not show_dot and not show_svg):
         G.print_text(show_descents=True)
     
     if show_descents:
         G.print_descent_sets()
     
+    if show_painted:
+        G.print_painted_partitions()
+    
     if show_matrix:
         G.print_matrix()
     
     if show_dot:
-        dot = G.generate_dot()
+        dot = G.generate_dot(color_by_beta=color_by_beta)
         print("\nDOT format:")
         print("-" * 40)
         print(dot)
         
         # Also save to file
-        G.save_dot(f"WGraph_n{n}.dot")
+        G.save_dot(f"WGraph_n{n}.dot", color_by_beta=color_by_beta)
     
     if show_svg:
-        G.save_svg(f"WGraph_n{n}.svg")
+        G.save_svg(f"WGraph_n{n}.svg", color_by_beta=color_by_beta)
 
 
 if __name__ == "__main__":
