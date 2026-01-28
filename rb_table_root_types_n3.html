@@ -1,0 +1,265 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+table{border-collapse:collapse;font-family:Arial, sans-serif;}
+th,td{border:1px solid #999;padding:4px 8px;text-align:left;}
+.red{color:#c00;}
+.blue{color:#06c;}
+</style>
+</head>
+<body>
+<table>
+<thead>
+<tr>
+<th>orbit</th>
+<th>s_1_type1</th>
+<th>s_1_type2</th>
+<th>s_2_type1</th>
+<th>s_2_type2</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>(<span class="blue">1</span>, <span class="blue">2</span>, <span class="blue">3</span>)</td>
+<td>U-</td>
+<td>U-</td>
+<td>U-</td>
+<td>U-</td>
+</tr>
+<tr>
+<td>(<span class="red">1</span>, <span class="blue">2</span>, <span class="blue">3</span>)</td>
+<td>U-</td>
+<td>U-</td>
+<td>U-</td>
+<td>U-</td>
+</tr>
+<tr>
+<td>(<span class="blue">1</span>, <span class="red">2</span>, <span class="blue">3</span>)</td>
+<td>T-</td>
+<td>T-</td>
+<td>U-</td>
+<td>U-</td>
+</tr>
+<tr>
+<td>(<span class="blue">1</span>, <span class="blue">2</span>, <span class="red">3</span>)</td>
+<td>U-</td>
+<td>U-</td>
+<td>T-</td>
+<td>T-</td>
+</tr>
+<tr>
+<td>(<span class="blue">1</span>, <span class="blue">3</span>, <span class="blue">2</span>)</td>
+<td>U-</td>
+<td>U-</td>
+<td>U+</td>
+<td>U+</td>
+</tr>
+<tr>
+<td>(<span class="red">1</span>, <span class="blue">3</span>, <span class="blue">2</span>)</td>
+<td>U-</td>
+<td>U-</td>
+<td>U+</td>
+<td>U+</td>
+</tr>
+<tr>
+<td>(<span class="blue">1</span>, <span class="red">3</span>, <span class="blue">2</span>)</td>
+<td>U-</td>
+<td>T-</td>
+<td>U+</td>
+<td>T-</td>
+</tr>
+<tr>
+<td>(<span class="blue">1</span>, <span class="blue">3</span>, <span class="red">2</span>)</td>
+<td>T-</td>
+<td>U-</td>
+<td>T-</td>
+<td>U+</td>
+</tr>
+<tr>
+<td>(<span class="blue">1</span>, <span class="red">3</span>, <span class="red">2</span>)</td>
+<td>T-</td>
+<td>T-</td>
+<td>T+</td>
+<td>T+</td>
+</tr>
+<tr>
+<td>(<span class="blue">2</span>, <span class="blue">1</span>, <span class="blue">3</span>)</td>
+<td>U+</td>
+<td>U+</td>
+<td>U-</td>
+<td>U-</td>
+</tr>
+<tr>
+<td>(<span class="red">2</span>, <span class="blue">1</span>, <span class="blue">3</span>)</td>
+<td>U+</td>
+<td>T-</td>
+<td>U-</td>
+<td>U-</td>
+</tr>
+<tr>
+<td>(<span class="blue">2</span>, <span class="red">1</span>, <span class="blue">3</span>)</td>
+<td>T-</td>
+<td>U+</td>
+<td>U-</td>
+<td>U-</td>
+</tr>
+<tr>
+<td>(<span class="blue">2</span>, <span class="blue">1</span>, <span class="red">3</span>)</td>
+<td>U+</td>
+<td>U+</td>
+<td>T-</td>
+<td>T-</td>
+</tr>
+<tr>
+<td>(<span class="red">2</span>, <span class="red">1</span>, <span class="blue">3</span>)</td>
+<td>T+</td>
+<td>T+</td>
+<td>U-</td>
+<td>U-</td>
+</tr>
+<tr>
+<td>(<span class="blue">2</span>, <span class="blue">3</span>, <span class="blue">1</span>)</td>
+<td>U+</td>
+<td>U-</td>
+<td>U-</td>
+<td>U+</td>
+</tr>
+<tr>
+<td>(<span class="red">2</span>, <span class="blue">3</span>, <span class="blue">1</span>)</td>
+<td>U+</td>
+<td>U-</td>
+<td>U-</td>
+<td>U+</td>
+</tr>
+<tr>
+<td>(<span class="blue">2</span>, <span class="red">3</span>, <span class="blue">1</span>)</td>
+<td>U+</td>
+<td>T-</td>
+<td>T-</td>
+<td>T-</td>
+</tr>
+<tr>
+<td>(<span class="blue">2</span>, <span class="blue">3</span>, <span class="red">1</span>)</td>
+<td>T-</td>
+<td>U-</td>
+<td>U-</td>
+<td>U+</td>
+</tr>
+<tr>
+<td>(<span class="red">2</span>, <span class="blue">3</span>, <span class="red">1</span>)</td>
+<td>T+</td>
+<td>U-</td>
+<td>U-</td>
+<td>U+</td>
+</tr>
+<tr>
+<td>(<span class="blue">2</span>, <span class="red">3</span>, <span class="red">1</span>)</td>
+<td>T-</td>
+<td>T-</td>
+<td>T-</td>
+<td>T+</td>
+</tr>
+<tr>
+<td>(<span class="blue">3</span>, <span class="blue">1</span>, <span class="blue">2</span>)</td>
+<td>U-</td>
+<td>U+</td>
+<td>U+</td>
+<td>U-</td>
+</tr>
+<tr>
+<td>(<span class="red">3</span>, <span class="blue">1</span>, <span class="blue">2</span>)</td>
+<td>U-</td>
+<td>T-</td>
+<td>U+</td>
+<td>U-</td>
+</tr>
+<tr>
+<td>(<span class="blue">3</span>, <span class="red">1</span>, <span class="blue">2</span>)</td>
+<td>U-</td>
+<td>U+</td>
+<td>U+</td>
+<td>U-</td>
+</tr>
+<tr>
+<td>(<span class="blue">3</span>, <span class="blue">1</span>, <span class="red">2</span>)</td>
+<td>T-</td>
+<td>U+</td>
+<td>T-</td>
+<td>T-</td>
+</tr>
+<tr>
+<td>(<span class="red">3</span>, <span class="red">1</span>, <span class="blue">2</span>)</td>
+<td>U-</td>
+<td>T+</td>
+<td>U+</td>
+<td>U-</td>
+</tr>
+<tr>
+<td>(<span class="red">3</span>, <span class="blue">1</span>, <span class="red">2</span>)</td>
+<td>T-</td>
+<td>T-</td>
+<td>T+</td>
+<td>T-</td>
+</tr>
+<tr>
+<td>(<span class="blue">3</span>, <span class="blue">2</span>, <span class="blue">1</span>)</td>
+<td>U+</td>
+<td>U+</td>
+<td>U+</td>
+<td>U+</td>
+</tr>
+<tr>
+<td>(<span class="red">3</span>, <span class="blue">2</span>, <span class="blue">1</span>)</td>
+<td>U+</td>
+<td>T-</td>
+<td>U+</td>
+<td>U+</td>
+</tr>
+<tr>
+<td>(<span class="blue">3</span>, <span class="red">2</span>, <span class="blue">1</span>)</td>
+<td>U+</td>
+<td>U+</td>
+<td>T-</td>
+<td>T-</td>
+</tr>
+<tr>
+<td>(<span class="blue">3</span>, <span class="blue">2</span>, <span class="red">1</span>)</td>
+<td>T-</td>
+<td>U+</td>
+<td>U+</td>
+<td>U+</td>
+</tr>
+<tr>
+<td>(<span class="red">3</span>, <span class="red">2</span>, <span class="blue">1</span>)</td>
+<td>U+</td>
+<td>T+</td>
+<td>T+</td>
+<td>T-</td>
+</tr>
+<tr>
+<td>(<span class="red">3</span>, <span class="blue">2</span>, <span class="red">1</span>)</td>
+<td>T-</td>
+<td>T-</td>
+<td>U+</td>
+<td>U+</td>
+</tr>
+<tr>
+<td>(<span class="blue">3</span>, <span class="red">2</span>, <span class="red">1</span>)</td>
+<td>T+</td>
+<td>U+</td>
+<td>T-</td>
+<td>T+</td>
+</tr>
+<tr>
+<td>(<span class="red">3</span>, <span class="red">2</span>, <span class="red">1</span>)</td>
+<td>T+</td>
+<td>T+</td>
+<td>T+</td>
+<td>T+</td>
+</tr>
+</tbody>
+</table>
+</body>
+</html>

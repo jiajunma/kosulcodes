@@ -241,6 +241,28 @@ def tilde_inverse(w, beta):
     return w_inv, beta_img
 
 
+def fourier_transform(w, beta):
+    """
+    Compute the Fourier transform of (w, beta): 
+    F(w~) = (w0 w w0, complement of w0(beta) in {1..n}).
+    
+    Args:
+        w: A permutation (tuple or list) of length n.
+        beta: A set of indices (1-based) representing a subset of {1..n}.
+
+    Returns:
+        (w0 * w * w0, {1,..,n} \ w0(beta)) as a tuple (permutation, set).
+    """
+    n = len(w)
+    w0 = longest_element(n)
+    # Compute w0 * w * w0
+    w0ww0 = permutation_prod(w0, permutation_prod(w, w0))
+    # Map beta through w0, collecting images
+    beta_img = {w0[i - 1] for i in beta}
+    beta_comp = set(range(1, n + 1)).difference(beta_img)
+    return w0ww0, beta_comp
+
+
 def right_action_rb(wtilde, x):
     """
     Right action of x in S_n on (w, beta): (w x, x(beta)).

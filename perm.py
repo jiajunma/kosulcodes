@@ -244,6 +244,17 @@ def reduced_word(w):
     return word
 
 
+def longest_element(n):
+    """
+    Return the longest element w0 in S_n: w0(i) = n + 1 - i.
+
+    Examples:
+        >>> longest_element(4)
+        (4, 3, 2, 1)
+    """
+    return tuple(range(n, 0, -1))
+
+
 def is_bruhat_leq(u, v):
     """
     Decide whether permutation u is <= v in the (strong) Bruhat order.
