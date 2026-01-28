@@ -104,6 +104,62 @@ class WGraph:
         beta_str = "".join(str(x) for x in sorted(beta))
         return f"{w_str}|{beta_str}"
     
+    def format_colored_word(self, key, use_ansi=False):
+        """
+        Format (w, β) as a colored word.
+        
+        For (w, β): paint w(i) blue if i ∈ β, red if i ∉ β.
+        
+        Args:
+            key: normalized key (w, beta)
+            use_ansi: if True, use ANSI color codes for terminal
+        
+        Returns:
+            str: colored word representation
+        """
+        w, beta = denormalize_key(key)
+        n = len(w)
+        
+        if use_ansi:
+            # ANSI color codes
+            RED = "\033[91m"
+            BLUE = "\033[94m"
+            RESET = "\033[0m"
+            
+            result = ""
+            for i in range(1, n + 1):
+                if i in beta:
+                    result += f"{BLUE}{w[i-1]}{RESET}"
+                else:
+                    result += f"{RED}{w[i-1]}{RESET}"
+            return result
+        else:
+            # Text representation: [r] for red, [b] for blue
+            parts = []
+            for i in range(1, n + 1):
+                if i in beta:
+                    parts.append(f"{w[i-1]}ᵇ")  # superscript b for blue
+                else:
+                    parts.append(f"{w[i-1]}ʳ")  # superscript r for red
+            return "".join(parts)
+    
+    def format_colored_word_html(self, key):
+        """
+        Format (w, β) as HTML colored word for DOT/SVG.
+        
+        For (w, β): paint w(i) blue if i ∈ β, red if i ∉ β.
+        """
+        w, beta = denormalize_key(key)
+        n = len(w)
+        
+        parts = []
+        for i in range(1, n + 1):
+            if i in beta:
+                parts.append(f'<font color="blue">{w[i-1]}</font>')
+            else:
+                parts.append(f'<font color="red">{w[i-1]}</font>')
+        return "".join(parts)
+    
     def vertex_id(self, key):
         """Generate a valid DOT node ID."""
         w, beta = denormalize_key(key)
@@ -111,13 +167,17 @@ class WGraph:
         beta_str = "".join(str(x) for x in sorted(beta))
         return f"v_{w_str}_{beta_str}"
     
-    def print_text(self, show_descents=True):
+    def print_text(self, show_descents=True, use_colored_words=False):
         """Print W-graph in text format."""
         edges = self.compute_edges()
         descents = self.compute_descents()
         
         print(f"\nW-graph for HeckeRB bimodule (n={self.n})")
         print("=" * 60)
+        
+        if use_colored_words:
+            print("\nColored word notation: w(i) is blue if i ∈ β, red if i ∉ β")
+            print("  Notation: digit^b = blue, digit^r = red")
         
         # Vertices with descent sets
         print(f"\nVertices ({len(self._vertices)} total):")
@@ -130,7 +190,11 @@ class WGraph:
         for key in sorted_vertices:
             w, beta = denormalize_key(key)
             ell = self.R.ell_wtilde(w, beta)
-            v_str = self.format_vertex(key)
+            
+            if use_colored_words:
+                v_str = self.format_colored_word(key)
+            else:
+                v_str = self.format_vertex(key)
             
             if show_descents:
                 tau = descents[key]
@@ -151,8 +215,12 @@ class WGraph:
         ))
         
         for y_key, w_key, mu in sorted_edges:
-            y_str = self.format_vertex(y_key)
-            w_str = self.format_vertex(w_key)
+            if use_colored_words:
+                y_str = self.format_colored_word(y_key)
+                w_str = self.format_colored_word(w_key)
+            else:
+                y_str = self.format_vertex(y_key)
+                w_str = self.format_vertex(w_key)
             ell_y = self.R.ell_wtilde(*denormalize_key(y_key))
             ell_w = self.R.ell_wtilde(*denormalize_key(w_key))
             print(f"  [{y_str}] --({mu})--> [{w_str}]  (Δℓ={ell_w - ell_y})")
@@ -291,14 +359,15 @@ class WGraph:
         # Fallback based on size
         return self.get_beta_color(beta)
 
-    def generate_dot(self, show_descents=True, rankdir="TB", color_by_beta=True):
+    def generate_dot(self, show_descents=True, rankdir="TB", color_by_beta=True, use_colored_words=True):
         """
         Generate DOT format for Graphviz visualization.
         
         Args:
             show_descents: include descent sets in labels
             rankdir: graph direction (TB=top-bottom, LR=left-right)
-            color_by_beta: color nodes by painted partition β
+            color_by_beta: color node background by painted partition size |β|
+            use_colored_words: color individual digits (blue if i ∈ β, red if i ∉ β)
         
         Returns:
             str: DOT format string
@@ -313,14 +382,17 @@ class WGraph:
         lines.append('    edge [fontname="Courier"];')
         lines.append('')
         
-        # Add legend for colors
-        if color_by_beta:
-            lines.append('    // Legend')
-            lines.append('    subgraph cluster_legend {')
+        # Add legend
+        lines.append('    // Legend')
+        lines.append('    subgraph cluster_legend {')
+        if use_colored_words:
+            lines.append('        label="Colored words: blue if i∈β, red if i∉β";')
+        else:
             lines.append('        label="Painted partition |β|";')
-            lines.append('        style=solid;')
-            lines.append('        fontsize=12;')
-            
+        lines.append('        style=solid;')
+        lines.append('        fontsize=12;')
+        
+        if color_by_beta and not use_colored_words:
             # Show color legend for each |β| size
             seen_sizes = set()
             for key in self._vertices:
@@ -331,9 +403,13 @@ class WGraph:
                 dummy_beta = set(range(1, size + 1))
                 fillcolor, fontcolor = self.get_beta_color(dummy_beta)
                 lines.append(f'        legend_{size} [label="|β|={size}", fillcolor="{fillcolor}", fontcolor="{fontcolor}"];')
-            
-            lines.append('    }')
-            lines.append('')
+        elif use_colored_words:
+            # Show red/blue legend
+            lines.append(f'        legend_red [label=<i ∉ β: <font color="red">red</font>>, fillcolor="white"];')
+            lines.append(f'        legend_blue [label=<i ∈ β: <font color="blue">blue</font>>, fillcolor="white"];')
+        
+        lines.append('    }')
+        lines.append('')
         
         # Group vertices by length for ranking
         length_groups = {}
@@ -353,22 +429,39 @@ class WGraph:
             for key in length_groups[ell]:
                 w, beta = denormalize_key(key)
                 node_id = self.vertex_id(key)
-                label = self.format_vertex_short(key)
                 
-                if show_descents:
-                    tau = descents[key]
-                    tau_str = ",".join(str(i) for i in sorted(tau))
-                    if tau_str:
-                        label += f"\\nτ={{{tau_str}}}"
-                    else:
-                        label += "\\nτ={}"
-                
-                # Add color based on β
-                if color_by_beta:
-                    fillcolor, fontcolor = self.get_beta_color_by_pattern(beta, self.n)
-                    lines.append(f'        {node_id} [label="{label}", fillcolor="{fillcolor}", fontcolor="{fontcolor}"];')
+                # Create label with colored word
+                if use_colored_words:
+                    colored_word = self.format_colored_word_html(key)
+                    label = f"<{colored_word}>"
+                    
+                    if show_descents:
+                        tau = descents[key]
+                        tau_str = ",".join(str(i) for i in sorted(tau))
+                        if tau_str:
+                            label = f"<{colored_word}<br/>τ={{{tau_str}}}>"
+                        else:
+                            label = f"<{colored_word}<br/>τ={{}}>"
+                    
+                    # Use white background for colored words
+                    lines.append(f'        {node_id} [label={label}, fillcolor="white"];')
                 else:
-                    lines.append(f'        {node_id} [label="{label}"];')
+                    label = self.format_vertex_short(key)
+                    
+                    if show_descents:
+                        tau = descents[key]
+                        tau_str = ",".join(str(i) for i in sorted(tau))
+                        if tau_str:
+                            label += f"\\nτ={{{tau_str}}}"
+                        else:
+                            label += "\\nτ={}"
+                    
+                    # Add color based on β
+                    if color_by_beta:
+                        fillcolor, fontcolor = self.get_beta_color_by_pattern(beta, self.n)
+                        lines.append(f'        {node_id} [label="{label}", fillcolor="{fillcolor}", fontcolor="{fontcolor}"];')
+                    else:
+                        lines.append(f'        {node_id} [label="{label}"];')
             
             lines.append('    }')
             lines.append('')
@@ -387,20 +480,20 @@ class WGraph:
         lines.append('}')
         return '\n'.join(lines)
     
-    def save_dot(self, filename, color_by_beta=True):
+    def save_dot(self, filename, color_by_beta=True, use_colored_words=True):
         """Save DOT format to file."""
-        dot = self.generate_dot(color_by_beta=color_by_beta)
+        dot = self.generate_dot(color_by_beta=color_by_beta, use_colored_words=use_colored_words)
         with open(filename, 'w') as f:
             f.write(dot)
         print(f"DOT file saved to: {filename}")
     
-    def save_svg(self, filename, color_by_beta=True):
+    def save_svg(self, filename, color_by_beta=True, use_colored_words=True):
         """
         Generate SVG using Graphviz.
         
         Requires graphviz to be installed (dot command).
         """
-        dot = self.generate_dot(color_by_beta=color_by_beta)
+        dot = self.generate_dot(color_by_beta=color_by_beta, use_colored_words=use_colored_words)
         
         try:
             result = subprocess.run(
@@ -498,18 +591,20 @@ def main():
         print("  n: size of the symmetric group")
         print("  options:")
         print("    --text      : text-based output (default)")
+        print("    --colored   : show colored word notation (blue=i∈β, red=i∉β)")
         print("    --descents  : show descent sets for each vertex")
         print("    --painted   : show vertices grouped by painted partition β")
         print("    --matrix    : show adjacency matrix")
         print("    --dot       : output DOT format for Graphviz")
         print("    --svg       : generate SVG file (requires graphviz)")
-        print("    --nocolor   : disable color coding by β in DOT/SVG")
+        print("    --nocolor   : disable colored words in DOT/SVG (use |β| coloring)")
         print("    --all       : show all outputs")
         sys.exit(1)
     
     n = int(sys.argv[1])
     
     show_text = "--text" in sys.argv or len(sys.argv) == 2
+    show_colored = "--colored" in sys.argv
     show_descents = "--descents" in sys.argv
     show_painted = "--painted" in sys.argv
     show_matrix = "--matrix" in sys.argv
@@ -518,17 +613,21 @@ def main():
     no_color = "--nocolor" in sys.argv
     show_all = "--all" in sys.argv
     
-    color_by_beta = not no_color
+    use_colored_words = not no_color
+    color_by_beta = True
     
     if show_all:
-        show_text = show_descents = show_painted = show_matrix = show_dot = show_svg = True
+        show_text = show_colored = show_descents = show_painted = show_matrix = show_dot = show_svg = True
     
     print(f"\n=== W-graph for HeckeRB bimodule (n={n}) ===")
     
     G = WGraph(n)
     
-    if show_text or (not show_descents and not show_painted and not show_matrix and not show_dot and not show_svg):
-        G.print_text(show_descents=True)
+    if show_text or (not show_colored and not show_descents and not show_painted and not show_matrix and not show_dot and not show_svg):
+        G.print_text(show_descents=True, use_colored_words=False)
+    
+    if show_colored:
+        G.print_text(show_descents=True, use_colored_words=True)
     
     if show_descents:
         G.print_descent_sets()
@@ -540,16 +639,16 @@ def main():
         G.print_matrix()
     
     if show_dot:
-        dot = G.generate_dot(color_by_beta=color_by_beta)
+        dot = G.generate_dot(color_by_beta=color_by_beta, use_colored_words=use_colored_words)
         print("\nDOT format:")
         print("-" * 40)
         print(dot)
         
         # Also save to file
-        G.save_dot(f"WGraph_n{n}.dot", color_by_beta=color_by_beta)
+        G.save_dot(f"WGraph_n{n}.dot", color_by_beta=color_by_beta, use_colored_words=use_colored_words)
     
     if show_svg:
-        G.save_svg(f"WGraph_n{n}.svg", color_by_beta=color_by_beta)
+        G.save_svg(f"WGraph_n{n}.svg", color_by_beta=color_by_beta, use_colored_words=use_colored_words)
 
 
 if __name__ == "__main__":
