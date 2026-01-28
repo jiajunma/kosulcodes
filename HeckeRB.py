@@ -746,6 +746,66 @@ class HeckeRB:
         # Default: P = 0 for non-adjacent pairs without specific structure
         return sp.Integer(0)
 
+    def mu_coefficient(self, y_key, w_key):
+        """
+        Compute the mu coefficient μ(ỹ, w̃).
+        
+        The mu coefficient is defined as the coefficient of v^{-(ℓ(w̃)-ℓ(ỹ)-1)/2}
+        in the KL polynomial P_{ỹ,w̃}, when ℓ(w̃) - ℓ(ỹ) is odd.
+        
+        For the W-graph, μ(ỹ, w̃) ≠ 0 implies an edge from ỹ to w̃.
+        
+        In the standard basis action:
+        H̃_{w̃} · H̃_s = ... + ∑_{ỹ: s ∈ τ(ỹ), s ∉ τ(w̃)} μ(ỹ, w̃) H̃_{ỹ} + ...
+        
+        Returns:
+            The mu coefficient (integer or 0)
+        """
+        if y_key == w_key:
+            return sp.Integer(0)
+        
+        if not self.is_bruhat_leq(y_key, w_key):
+            return sp.Integer(0)
+        
+        wy, betay = denormalize_key(y_key)
+        ww, betaw = denormalize_key(w_key)
+        ell_y = self.ell_wtilde(wy, betay)
+        ell_w = self.ell_wtilde(ww, betaw)
+        
+        diff = ell_w - ell_y
+        
+        # mu is only non-zero when the length difference is odd
+        if diff % 2 == 0:
+            return sp.Integer(0)
+        
+        # For adjacent elements (diff = 1), mu = 1 if they're covers
+        if diff == 1:
+            # Check if y is covered by w (immediate predecessor)
+            covers = self.bruhat_covers(w_key)
+            if y_key in covers:
+                return sp.Integer(1)
+            return sp.Integer(0)
+        
+        # For larger odd differences, mu comes from the KL polynomial
+        # mu = coefficient of v^{-(diff-1)/2} in P_{y,w}
+        p = self.kl_polynomial(y_key, w_key)
+        
+        if p == 0 or p == sp.Integer(0):
+            return sp.Integer(0)
+        
+        # Extract the coefficient
+        # P is in v^{-1}Z[v^{-1}], so we look at the term with v^{-(diff-1)/2}
+        target_exp = -(diff - 1) // 2
+        
+        # Expand p as a polynomial in v
+        p_expanded = sp.Poly(p, v)
+        coeffs = p_expanded.as_dict()
+        
+        if (target_exp,) in coeffs:
+            return coeffs[(target_exp,)]
+        
+        return sp.Integer(0)
+
     def canonical_basis_element(self, wtilde):
         """
         Compute the canonical (KL) basis element H̃_{w̃}.
@@ -1117,6 +1177,192 @@ class HeckeRB:
             print(f"  bar(H_[{wtilde_str}]) = {bar_str}")
             count += 1
 
+    def print_canonical_basis(self, max_elements=None):
+        """Print the canonical basis elements H̃_{w̃} in the H basis."""
+        if not hasattr(self, '_C_tilde') or not self._C_tilde:
+            self.compute_canonical_basis_iterative()
+        
+        basis = self._C_tilde
+        
+        print(f"\nCanonical basis elements (H̃_w̃ in H basis):")
+        print("-" * 60)
+        
+        # Sort by length for display
+        sorted_keys = sorted(basis.keys(), 
+                            key=lambda k: (self.ell_wtilde(*denormalize_key(k)), k))
+        
+        if max_elements is None:
+            max_elements = len(sorted_keys)
+        
+        for key in sorted_keys[:max_elements]:
+            w, beta = denormalize_key(key)
+            ell = self.ell_wtilde(w, beta)
+            element_str = self.format_element(basis[key])
+            wtilde_str = self._format_wtilde(w, beta)
+            print(f"  H̃_[{wtilde_str}] (ℓ={ell}) = {element_str}")
+        
+        if len(sorted_keys) > max_elements:
+            print(f"  ... ({len(sorted_keys) - max_elements} more elements)")
+
+    def print_kl_polynomials(self, max_pairs=20):
+        """Print non-trivial KL polynomials P_{y,w}."""
+        print(f"\nKazhdan-Lusztig polynomials P_{{ỹ,w̃}} (non-trivial only):")
+        print("-" * 60)
+        
+        count = 0
+        # Sort basis by length
+        sorted_keys = sorted(self._basis, 
+                            key=lambda k: (self.ell_wtilde(*denormalize_key(k)), k))
+        
+        for w_key in sorted_keys:
+            w, beta_w = denormalize_key(w_key)
+            ell_w = self.ell_wtilde(w, beta_w)
+            
+            lower = self.bruhat_lower_elements(w_key)
+            for y_key in lower:
+                y, beta_y = denormalize_key(y_key)
+                p = self.kl_polynomial(y_key, w_key)
+                
+                # Only show non-trivial polynomials (not 0 or 1)
+                if p != 0 and p != sp.Integer(0) and p != 1 and p != sp.Integer(1):
+                    if count >= max_pairs:
+                        print(f"  ... (more pairs)")
+                        return
+                    
+                    y_str = self._format_wtilde(y, beta_y)
+                    w_str = self._format_wtilde(w, beta_w)
+                    p_str = str(p).replace("**", "^")
+                    print(f"  P_[{y_str}, {w_str}] = {p_str}")
+                    count += 1
+        
+        if count == 0:
+            print("  (all KL polynomials are 0 or 1)")
+
+    def print_mu_coefficients(self, max_pairs=20):
+        """Print non-zero mu coefficients μ(ỹ, w̃)."""
+        print(f"\nMu coefficients μ(ỹ, w̃) for the W-graph (non-zero only):")
+        print("-" * 60)
+        
+        count = 0
+        sorted_keys = sorted(self._basis, 
+                            key=lambda k: (self.ell_wtilde(*denormalize_key(k)), k))
+        
+        for w_key in sorted_keys:
+            w, beta_w = denormalize_key(w_key)
+            
+            lower = self.bruhat_lower_elements(w_key)
+            for y_key in lower:
+                y, beta_y = denormalize_key(y_key)
+                mu = self.mu_coefficient(y_key, w_key)
+                
+                if mu != 0 and mu != sp.Integer(0):
+                    if count >= max_pairs:
+                        print(f"  ... (more pairs)")
+                        return
+                    
+                    y_str = self._format_wtilde(y, beta_y)
+                    w_str = self._format_wtilde(w, beta_w)
+                    print(f"  μ([{y_str}], [{w_str}]) = {mu}")
+                    count += 1
+        
+        if count == 0:
+            print("  (all mu coefficients are 0)")
+
+    def print_w_graph_edges(self, max_edges=30):
+        """Print the W-graph edges (where μ ≠ 0)."""
+        print(f"\nW-graph edges (ỹ → w̃ where μ(ỹ, w̃) ≠ 0):")
+        print("-" * 60)
+        
+        edges = []
+        for w_key in self._basis:
+            w, beta_w = denormalize_key(w_key)
+            
+            lower = self.bruhat_lower_elements(w_key)
+            for y_key in lower:
+                y, beta_y = denormalize_key(y_key)
+                mu = self.mu_coefficient(y_key, w_key)
+                
+                if mu != 0 and mu != sp.Integer(0):
+                    edges.append((y_key, w_key, mu))
+        
+        # Sort by length difference
+        edges.sort(key=lambda e: (
+            self.ell_wtilde(*denormalize_key(e[1])) - self.ell_wtilde(*denormalize_key(e[0])),
+            e[0], e[1]
+        ))
+        
+        for i, (y_key, w_key, mu) in enumerate(edges[:max_edges]):
+            y, beta_y = denormalize_key(y_key)
+            w, beta_w = denormalize_key(w_key)
+            y_str = self._format_wtilde(y, beta_y)
+            w_str = self._format_wtilde(w, beta_w)
+            ell_diff = self.ell_wtilde(w, beta_w) - self.ell_wtilde(y, beta_y)
+            print(f"  [{y_str}] --({mu})--> [{w_str}]  (Δℓ={ell_diff})")
+        
+        if len(edges) > max_edges:
+            print(f"  ... ({len(edges) - max_edges} more edges)")
+        
+        print(f"\nTotal W-graph edges: {len(edges)}")
+
+    def print_special_elements(self):
+        """Print information about special elements w_i = (id, {1,...,i})."""
+        print(f"\nSpecial elements w_i = (id, {{1,...,i}}):")
+        print("-" * 60)
+        
+        identity = tuple(range(1, self.n + 1))
+        
+        for i in range(self.n + 1):
+            key = self.special_element_key(i)
+            w, beta = denormalize_key(key)
+            ell = self.ell_wtilde(w, beta)
+            
+            wtilde_str = self._format_wtilde(w, beta)
+            print(f"  w_{i} = [{wtilde_str}], ℓ = {ell}")
+            
+            # Show H̃_{w_i} in H basis
+            if hasattr(self, '_C_tilde') and key in self._C_tilde:
+                h_tilde = self._C_tilde[key]
+                h_str = self.format_element(h_tilde)
+                print(f"       H̃_{{w_{i}}} = {h_str}")
+
+    def print_all_results(self, max_elements=15):
+        """Print all computed results in a comprehensive format."""
+        print(f"\n{'='*70}")
+        print(f"  COMPLETE RESULTS FOR HeckeRB BIMODULE (n={self.n})")
+        print(f"{'='*70}")
+        
+        # Basic info
+        self.print_basis_info()
+        
+        # Special elements
+        self.print_special_elements()
+        
+        # Hecke action
+        for i in range(1, self.n):
+            self.print_hecke_action(i, max_elements=max_elements)
+        
+        # Canonical basis
+        self.print_canonical_basis(max_elements=max_elements)
+        
+        # KL polynomials
+        self.print_kl_polynomials(max_pairs=max_elements)
+        
+        # Mu coefficients
+        self.print_mu_coefficients(max_pairs=max_elements)
+        
+        # W-graph edges
+        self.print_w_graph_edges(max_edges=max_elements)
+        
+        # Bar involution
+        self.print_bar_involution_table(max_elements=max_elements)
+        
+        # Verify bar involution
+        self.verify_bar_involution(max_elements=max_elements)
+        
+        print(f"\n{'='*70}")
+        print(f"  END OF RESULTS")
+        print(f"{'='*70}")
+
 
 if __name__ == "__main__":
     import sys
@@ -1126,15 +1372,25 @@ if __name__ == "__main__":
         print("Usage: python HeckeRB.py <n> [options]")
         print("  n: size of the symmetric group")
         print("  options:")
+        print("    --all       : print all results (comprehensive)")
         print("    --action    : show Hecke algebra action on basis")
         print("    --bar       : show bar involution table")
         print("    --verify    : verify bar involution (bar ∘ bar = id)")
+        print("    --kl        : show KL polynomials")
+        print("    --mu        : show mu coefficients")
+        print("    --wgraph    : show W-graph edges")
+        print("    --special   : show special elements info")
         sys.exit(1)
     
     n = int(sys.argv[1])
+    show_all = "--all" in sys.argv
     show_action = "--action" in sys.argv
     show_bar = "--bar" in sys.argv
     verify_bar = "--verify" in sys.argv
+    show_kl = "--kl" in sys.argv
+    show_mu = "--mu" in sys.argv
+    show_wgraph = "--wgraph" in sys.argv
+    show_special = "--special" in sys.argv
     
     print(f"\n=== Computing HeckeRB bimodule for n={n} ===\n")
     
@@ -1142,12 +1398,26 @@ if __name__ == "__main__":
     
     # Create the HeckeRB bimodule
     R = HeckeRB(n)
+    
+    # If --all, print everything
+    if show_all:
+        R.compute_canonical_basis_iterative()
+        elapsed = time.perf_counter() - start
+        R.print_all_results(max_elements=20)
+        print(f"\nTotal computation time: {elapsed:.3f}s")
+        sys.exit(0)
+    
     R.print_basis_info()
+    
+    # Show special elements if requested
+    if show_special:
+        R.compute_canonical_basis_iterative()
+        R.print_special_elements()
     
     # Show Hecke action if requested
     if show_action:
         for i in range(1, n):
-            R.print_hecke_action(i, max_elements=10)
+            R.print_hecke_action(i, max_elements=15)
     
     # Compute the canonical basis
     print("\nComputing canonical basis...")
@@ -1156,24 +1426,22 @@ if __name__ == "__main__":
     elapsed = time.perf_counter() - start
     
     # Print the canonical basis elements
-    print(f"\nCanonical basis elements (H̃_w̃ in H basis):")
-    print("-" * 60)
-    
-    # Sort by length for display
-    sorted_keys = sorted(basis.keys(), 
-                        key=lambda k: (R.ell_wtilde(*denormalize_key(k)), k))
-    
-    for key in sorted_keys[:20]:  # Show first 20 elements
-        w, beta = denormalize_key(key)
-        ell = R.ell_wtilde(w, beta)
-        element_str = R.format_element(basis[key])
-        print(f"H̃_[{w}, {beta}] (ℓ={ell}) = {element_str}")
-    
-    if len(sorted_keys) > 20:
-        print(f"  ... ({len(sorted_keys) - 20} more elements)")
+    R.print_canonical_basis(max_elements=20)
     
     print("-" * 60)
     print(f"Total computation time: {elapsed:.3f}s")
+    
+    # Show KL polynomials if requested
+    if show_kl:
+        R.print_kl_polynomials(max_pairs=20)
+    
+    # Show mu coefficients if requested
+    if show_mu:
+        R.print_mu_coefficients(max_pairs=20)
+    
+    # Show W-graph if requested
+    if show_wgraph:
+        R.print_w_graph_edges(max_edges=30)
     
     # Show bar involution table if requested
     if show_bar:
