@@ -11,7 +11,13 @@ from perm import (
     simple_reflection,
     right_descending_element,
 )
-from RB_Bruhat import bruhat_downsets, node_key
+from RB_Bruhat import (
+    node_key,
+    get_bruhat_order,
+    is_bruhat_leq as rb_is_bruhat_leq,
+    bruhat_lower_elements as rb_bruhat_lower_elements,
+    bruhat_covers as rb_bruhat_covers,
+)
 
 
 def normalize_key(w, beta):
@@ -210,19 +216,16 @@ class HeckeRB:
         return result
 
     # =========================================================================
-    # Bruhat order on RB
+    # Bruhat order on RB (using RB_Bruhat module)
     # =========================================================================
-    def _init_bruhat_order(self):
-        """Initialize the Bruhat order structures."""
-        if hasattr(self, '_bruhat_downsets'):
-            return
-        # Compute Bruhat downsets using RB_Bruhat module
-        self._bruhat_downsets = bruhat_downsets(self.n)
-        # Build leq cache
-        self._bruhat_leq_cache = {}
-        for key, downset in self._bruhat_downsets.items():
-            for y in downset:
-                self._bruhat_leq_cache[(y, key)] = True
+    def _normalize_to_key(self, wtilde):
+        """Convert wtilde to normalized key format."""
+        if isinstance(wtilde, tuple) and len(wtilde) == 2:
+            if isinstance(wtilde[1], set):
+                return normalize_key(*wtilde)
+            else:
+                return wtilde
+        return wtilde
 
     def is_bruhat_leq(self, wtilde1, wtilde2):
         """
@@ -231,32 +234,19 @@ class HeckeRB:
         Args:
             wtilde1, wtilde2: pairs (w, beta) or normalized keys
         """
-        self._init_bruhat_order()
-        if isinstance(wtilde1, tuple) and len(wtilde1) == 2:
-            if isinstance(wtilde1[1], set):
-                key1 = normalize_key(*wtilde1)
-            else:
-                key1 = wtilde1
-        else:
-            key1 = wtilde1
-        if isinstance(wtilde2, tuple) and len(wtilde2) == 2:
-            if isinstance(wtilde2[1], set):
-                key2 = normalize_key(*wtilde2)
-            else:
-                key2 = wtilde2
-        else:
-            key2 = wtilde2
-        return self._bruhat_leq_cache.get((key1, key2), False)
+        key1 = self._normalize_to_key(wtilde1)
+        key2 = self._normalize_to_key(wtilde2)
+        return rb_is_bruhat_leq(key1, key2, self.n)
 
     def bruhat_lower_elements(self, wtilde):
         """Return all elements < wtilde in Bruhat order."""
-        self._init_bruhat_order()
-        if isinstance(wtilde, tuple) and len(wtilde) == 2 and isinstance(wtilde[1], set):
-            key = normalize_key(*wtilde)
-        else:
-            key = wtilde
-        downset = self._bruhat_downsets.get(key, set())
-        return {y for y in downset if y != key}
+        key = self._normalize_to_key(wtilde)
+        return rb_bruhat_lower_elements(key, self.n)
+
+    def bruhat_covers(self, wtilde):
+        """Return elements covered by wtilde (immediate predecessors)."""
+        key = self._normalize_to_key(wtilde)
+        return rb_bruhat_covers(key, self.n)
 
     # =========================================================================
     # Special elements w_i = (id, {1,...,i})
@@ -717,8 +707,6 @@ class HeckeRB:
         Returns:
             dict mapping keys (w, beta) to their canonical basis elements.
         """
-        self._init_bruhat_order()
-        
         # Sort elements by length (dimension)
         elements_by_length = {}
         for key in self._basis:
@@ -814,7 +802,6 @@ class HeckeRB:
         - H̃_{w̃} = H̃_{w̃} (bar-invariant)
         - H̃_{w̃} = H_{w̃} + ∑_{ỹ < w̃} P_{w̃,ỹ} H_{ỹ} with P_{w̃,ỹ} ∈ v^{-1}Z[v^{-1}]
         """
-        self._init_bruhat_order()
         self._init_bar_cache()
         
         # Sort elements by length

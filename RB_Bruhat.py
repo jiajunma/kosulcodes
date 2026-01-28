@@ -108,6 +108,85 @@ def bruhat_downsets(n):
 
     return downset
 
+
+# Cache for Bruhat order data
+_bruhat_cache = {}
+
+
+def get_bruhat_order(n):
+    """
+    Get (or compute and cache) the Bruhat order data for S_n.
+    
+    Returns:
+        tuple: (downsets dict, leq_cache dict)
+    """
+    if n not in _bruhat_cache:
+        downsets = bruhat_downsets(n)
+        # Build leq cache for fast lookup
+        leq_cache = {}
+        for key, downset in downsets.items():
+            for y in downset:
+                leq_cache[(y, key)] = True
+        _bruhat_cache[n] = (downsets, leq_cache)
+    return _bruhat_cache[n]
+
+
+def is_bruhat_leq(key1, key2, n=None):
+    """
+    Check if key1 <= key2 in the Bruhat order on RB.
+    
+    Args:
+        key1, key2: normalized keys (w, sigma) as tuples
+        n: size of symmetric group (inferred from keys if not provided)
+    
+    Returns:
+        bool: True if key1 <= key2 in Bruhat order
+    """
+    if n is None:
+        n = len(key1[0])
+    downsets, leq_cache = get_bruhat_order(n)
+    return leq_cache.get((key1, key2), False)
+
+
+def bruhat_lower_elements(key, n=None):
+    """
+    Return all elements strictly less than key in Bruhat order.
+    
+    Args:
+        key: normalized key (w, sigma) as tuple
+        n: size of symmetric group (inferred from key if not provided)
+    
+    Returns:
+        set: all keys y such that y < key
+    """
+    if n is None:
+        n = len(key[0])
+    downsets, _ = get_bruhat_order(n)
+    downset = downsets.get(key, {key})
+    return {y for y in downset if y != key}
+
+
+def bruhat_covers(key, n=None):
+    """
+    Return elements covered by key (immediate predecessors in Bruhat order).
+    
+    Args:
+        key: normalized key (w, sigma) as tuple
+        n: size of symmetric group (inferred from key if not provided)
+    
+    Returns:
+        set: all keys y such that y is covered by key (y < key and no z with y < z < key)
+    """
+    if n is None:
+        n = len(key[0])
+    downsets, _ = get_bruhat_order(n)
+    downset = downsets.get(key, {key})
+    candidates = {y for y in downset if y != key}
+    # Remove non-covers: if y < z < key, then y is not a cover
+    for z in list(candidates):
+        candidates.difference_update(downsets.get(z, {z}) - {z})
+    return candidates
+
 def bruhat_hasse_edges(n):
     """
     Compute Hasse edges from Bruhat downsets (cover relations).
