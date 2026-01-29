@@ -1,7 +1,7 @@
 import sympy as sp
 
 from HeckeA import v, q, HeckeA
-from RB import beta_to_sigma, generate_all_beta, right_action_rb, tilde_inverse 
+from RB import beta_to_sigma, generate_all_beta, right_action_rb, tilde_inverse, str_colored_partition
 from perm import (
     generate_permutations,
     inverse_permutation,
@@ -208,6 +208,56 @@ class HeckeRB:
         coeff = (-v) ** (-self.ell_wtilde(w, beta))
         return {normalize_key(w, beta): sp.expand(coeff)}
 
+    def T_to_H(self, element):
+        """
+        Convert an element from T-basis to H-basis.
+        
+        Given element = ∑ c_k T_{w̃_k} in T-basis,
+        returns the same element expressed in H-basis.
+        
+        Since H_{w̃} = (-v)^{-ℓ(w̃)} T_{w̃}, we have T_{w̃} = (-v)^{ℓ(w̃)} H_{w̃}.
+        So ∑ c_k T_{w̃_k} = ∑ c_k (-v)^{ℓ(w̃_k)} H_{w̃_k}
+        
+        Args:
+            element: dict mapping (w, beta) keys to coefficients (in T-basis)
+        
+        Returns:
+            dict mapping (w, beta) keys to coefficients (in H-basis)
+        """
+        result = {}
+        for key, coeff in element.items():
+            w, beta = denormalize_key(key)
+            ell = self.ell_wtilde(w, beta)
+            # T_{w̃} = (-v)^{ℓ(w̃)} H_{w̃}
+            h_coeff = coeff * ((-v) ** ell)
+            result[key] = result.get(key, sp.Integer(0)) + h_coeff
+        return {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
+
+    def H_to_T(self, element):
+        """
+        Convert an element from H-basis to T-basis.
+        
+        Given element = ∑ d_k H_{w̃_k} in H-basis,
+        returns the same element expressed in T-basis.
+        
+        Since H_{w̃} = (-v)^{-ℓ(w̃)} T_{w̃}, we have:
+        ∑ d_k H_{w̃_k} = ∑ d_k (-v)^{-ℓ(w̃_k)} T_{w̃_k}
+        
+        Args:
+            element: dict mapping (w, beta) keys to coefficients (in H-basis)
+        
+        Returns:
+            dict mapping (w, beta) keys to coefficients (in T-basis)
+        """
+        result = {}
+        for key, coeff in element.items():
+            w, beta = denormalize_key(key)
+            ell = self.ell_wtilde(w, beta)
+            # H_{w̃} = (-v)^{-ℓ(w̃)} T_{w̃}
+            t_coeff = coeff * ((-v) ** (-ell))
+            result[key] = result.get(key, sp.Integer(0)) + t_coeff
+        return {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
+
     def tilde_inverse_element(self, element):
         """
         Apply (w,beta) -> (w^{-1}, w(beta)) on each basis term.
@@ -305,289 +355,343 @@ class HeckeRB:
         """Apply bar involution to coefficient: v -> v^{-1}."""
         return sp.expand(expr.subs({v: v ** -1}))
 
-    def _init_bar_cache(self):
-        """Initialize bar involution cache for special elements."""
-        if hasattr(self, '_bar_cache'):
-            return
-        self._bar_cache = {}
+    def compute_bar_involution(self, verbose=False):
+        """
+        Compute bar involution on every standard basis element T_{w̃}.
         
-        # For special elements w_i = (id, {1,...,i}), compute bar(H_{w_i})
-        # Using the formula: H̃_{w_i} = ∑_{j≤i} (-v)^{j-i} H_{w_j}
-        # And H̃_{w_i} is bar-invariant.
-        # So we can derive bar(H_{w_i}) from the inverse transformation.
+        Algorithm:
+        1. Create a list indexed by length of all basis elements
+        2. Set bar(T_{w_i}) for special elements using:
+           bar(T_{w_i}) = v^{-2i} T_{w_i} + ∑_{j<i} (v^{-2i} - v^{-2i+2}) T_{w_j}
+        3. Iterate over length from 0 to maximal:
+           - For each w̃ of length ℓ, compute T_{w̃} · T_s for all simple s
+           - Find w̃'' with ℓ(w̃'') > ℓ(w̃) and coefficient ±1
+           - Compute: bar(T_{w̃''}) = bar(T_{w̃}) · bar(T_s) - ∑_{w̃'≠w̃''} bar(a) bar(T_{w̃'})
+        4. Verify all elements are reached
         
-        identity = tuple(range(1, self.n + 1))
+        Returns:
+            dict: mapping key -> bar(T_{key}) as element dict
+        """
+        bar_table = {}
+        
+        # Step 1: Create list indexed by length
+        elements_by_length = {}
+        max_length = 0
+        for key in self._basis:
+            w, beta = denormalize_key(key)
+            ell = self.ell_wtilde(w, beta)
+            if ell not in elements_by_length:
+                elements_by_length[ell] = []
+            elements_by_length[ell].append(key)
+            max_length = max(max_length, ell)
+        
+        if verbose:
+            print("Step 1: Elements by length")
+            for ell in sorted(elements_by_length.keys()):
+                print(f"  Length {ell}: {len(elements_by_length[ell])} elements")
+        
+        # Step 2: Set bar(T_{w_i}) for special elements
+        # bar(T_{w_i}) = v^{-2i} T_{w_i} + ∑_{j<i} (v^{-2i} - v^{-2(i-1)}) T_{w_j}
+        #             = v^{-2i} T_{w_i} + ∑_{j<i} (v^{-2i} - v^{-2i+2}) T_{w_j}
+        if verbose:
+            print("\nStep 2: Bar involution for special elements T_{w_i}")
+        
         special_keys = [self.special_element_key(i) for i in range(self.n + 1)]
-        
-        # Compute the transformation matrix A where H̃ = A H
-        # A_{ij} = (-v)^{j-i} for j <= i
-        # And its inverse A^{-1}
-        # Then bar(H) = bar(A^{-1}) H̃ = bar(A^{-1}) A H
-        
-        # For computational purposes, we express bar(H_{w_i}) in terms of H_{w_j}
-        # bar(H_{w_i}) = H_{w_i} + (v - v^{-1}) H_{w_{i-1}} + ... (computed recursively)
         
         for i in range(self.n + 1):
             key_i = special_keys[i]
-            # Compute bar(H_{w_i}) using the derived formula
-            # bar(H_{w_i}) expressed in H basis
-            result = {}
-            for j in range(i + 1):
+            bar_i = {}
+            
+            # Coefficient of T_{w_i}: v^{-2i}
+            bar_i[key_i] = v ** (-2 * i)
+            
+            # Coefficient of T_{w_j} for j < i: (v^{-2i} - v^{-2i+2})
+            for j in range(i):
                 key_j = special_keys[j]
-                # Coefficient of H_{w_j} in bar(H_{w_i})
-                # From the analysis: bar(H_{w_i}) involves terms with coefficients
-                # that can be computed from the transformation
-                if j == i:
-                    result[key_j] = sp.Integer(1)
-                elif j == i - 1:
-                    result[key_j] = v - v**(-1)
-                # For j < i-1, the coefficients involve more complex expressions
-                # We compute them recursively
+                coeff = v ** (-2 * i) - v ** (-2 * i + 2)
+                bar_i[key_j] = bar_i.get(key_j, sp.Integer(0)) + coeff
             
-            # Actually, let me compute this properly using the matrix approach
-            self._bar_cache[key_i] = result
-
-        # Compute bar involution for special elements more carefully
-        self._compute_special_bar_involution()
-
-    def _compute_special_bar_involution(self):
-        """
-        Compute bar involution for special elements w_i = (id, {1,...,i}).
-        
-        The special elements satisfy:
-        H̃_{w_i} = ∑_{j=0}^{i} (-v)^{j-i} H_{w_j}
-        
-        And H̃_{w_i} is bar-invariant, so bar(H̃_{w_i}) = H̃_{w_i}.
-        
-        We need to compute bar(H_{w_i}) in terms of H_{w_j}.
-        
-        Derivation:
-        - H = A^{-1} H̃ where A_{ij} = (-v)^{j-i} for j <= i
-        - A^{-1} has (A^{-1})_{ii} = 1, (A^{-1})_{i,i-1} = v^{-1}, zeros elsewhere
-        - So H_{w_i} = H̃_{w_i} + v^{-1} H̃_{w_{i-1}} for i >= 1
-        - bar(H_{w_i}) = H̃_{w_i} + v H̃_{w_{i-1}} (using bar(v^{-1}) = v, bar(H̃) = H̃)
-        """
-        special_keys = [self.special_element_key(i) for i in range(self.n + 1)]
-        
-        # Build H̃ -> H transformation matrix
-        # H̃_{w_i} = ∑_{j=0}^i (-v)^{j-i} H_{w_j}
-        H_tilde_in_H = {}
-        for i in range(self.n + 1):
-            H_tilde_in_H[i] = {}
-            for j in range(i + 1):
-                # (-v)^{j-i} = (-1)^{j-i} v^{j-i}
-                coeff = (-v) ** (j - i)
-                H_tilde_in_H[i][j] = sp.expand(coeff)
-        
-        # bar(H_{w_i}) in H basis:
-        # H_{w_0} = H̃_{w_0}, so bar(H_{w_0}) = H̃_{w_0} = H_{w_0}
-        # H_{w_i} = H̃_{w_i} + v^{-1} H̃_{w_{i-1}} for i >= 1
-        # bar(H_{w_i}) = H̃_{w_i} + v H̃_{w_{i-1}}
-        
-        for i in range(self.n + 1):
-            key_i = special_keys[i]
-            result = {}
+            bar_i = {k: sp.expand(c) for k, c in bar_i.items() if sp.expand(c) != 0}
+            bar_table[key_i] = bar_i
             
-            if i == 0:
-                # bar(H_{w_0}) = H_{w_0}
-                result[key_i] = sp.Integer(1)
+            if verbose:
+                w, beta = denormalize_key(key_i)
+                print(f"  bar(T_{{w_{i}}}) = {self._format_T_element(bar_i)}")
+        
+        # Step 3: Iterate by length from 0 to max_length
+        if verbose:
+            print("\nStep 3: Iterating by length")
+        
+        # bar(T_s) in Hecke algebra = q T_s + (q-1) = v^2 T_s + (v^2 - 1)
+        
+        for ell in range(max_length + 1):
+            # Multiple passes to ensure all elements at this length are computed
+            prev_count = -1
+            while len(bar_table) > prev_count:
+                prev_count = len(bar_table)
+                
+                if verbose:
+                    computed_at_ell = sum(1 for k in elements_by_length.get(ell, []) if k in bar_table)
+                    total_at_ell = len(elements_by_length.get(ell, []))
+                    print(f"\n  Length {ell}: {computed_at_ell}/{total_at_ell} computed")
+                
+                # Process all elements of length ell with known bar
+                for key in elements_by_length.get(ell, []):
+                    if key not in bar_table:
+                        continue
+                    
+                    w, beta = denormalize_key(key)
+                    
+                    # Try each simple reflection
+                    for s_idx in range(1, self.n):
+                        # Compute T_{w̃} · T_s
+                        action = self.right_action_basis_simple((w, beta), s_idx)
+                        
+                        # Find terms with ℓ(w̃'') > ℓ(w̃)
+                        higher_terms = []
+                        
+                        for k, c in action.items():
+                            w_k, beta_k = denormalize_key(k)
+                            ell_k = self.ell_wtilde(w_k, beta_k)
+                            if ell_k > ell:
+                                higher_terms.append((k, c))
+                        
+                        if len(higher_terms) == 0:
+                            continue
+                        
+                        # Check the claim
+                        if len(higher_terms) > 1 and verbose:
+                            print(f"    NOTE: T_[{w},{beta}] · T_s{s_idx} has {len(higher_terms)} higher terms")
+                        
+                        for key_higher, coeff_higher in higher_terms:
+                            c_expanded = sp.expand(coeff_higher)
+                            
+                            # Verify coefficient is ±1
+                            if c_expanded != 1 and c_expanded != -1:
+                                if verbose:
+                                    w_h, beta_h = denormalize_key(key_higher)
+                                    print(f"    CLAIM FAILED: Coeff of T_[{w_h},{beta_h}] is {c_expanded}")
+                                continue
+                            
+                            if key_higher in bar_table:
+                                continue
+                            
+                            # Check all correction terms are available
+                            can_compute = True
+                            for k_other, a_other in action.items():
+                                if k_other != key_higher and k_other not in bar_table:
+                                    can_compute = False
+                                    break
+                            
+                            if not can_compute:
+                                continue
+                            
+                            # Compute bar(T_{w̃''})
+                            bar_w = bar_table[key]
+                            
+                            # bar(T_{w̃}) · bar(T_s) = bar(T_{w̃}) · (q T_s + (q-1))
+                            bar_w_times_Ts = self.right_action_simple(bar_w, s_idx)
+                            
+                            result = {}
+                            for k, c in bar_w_times_Ts.items():
+                                result[k] = result.get(k, sp.Integer(0)) + q * c
+                            for k, c in bar_w.items():
+                                result[k] = result.get(k, sp.Integer(0)) + (q - 1) * c
+                            
+                            # Subtract bar(a) * bar(T_{w̃'}) for w̃' ≠ w̃''
+                            for k_other, a_other in action.items():
+                                if k_other == key_higher:
+                                    continue
+                                bar_other = bar_table[k_other]
+                                a_bar = self.bar_coeff(a_other)
+                                for k, c in bar_other.items():
+                                    result[k] = result.get(k, sp.Integer(0)) - a_bar * c
+                            
+                            # Divide by coefficient (±1)
+                            if c_expanded == -1:
+                                result = {k: -c for k, c in result.items()}
+                            
+                            result = {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
+                            bar_table[key_higher] = result
+                            
+                            if verbose:
+                                w_h, beta_h = denormalize_key(key_higher)
+                                print(f"    bar(T_[{w_h},{beta_h}]) from T_[{w},{beta}] · T_s{s_idx}")
+                    
+                    # Also try left action T_s · T_{w̃} for this element
+                    for s_idx in range(1, self.n):
+                        # T_s · T_{w̃} = ι(ι(T_{w̃}) · T_s)
+                        w_inv, beta_inv = tilde_inverse(w, beta)
+                        action_inv = self.right_action_basis_simple((w_inv, beta_inv), s_idx)
+                        
+                        action = {}
+                        for k, c in action_inv.items():
+                            w_k, beta_k = denormalize_key(k)
+                            w_k_back, beta_k_back = tilde_inverse(w_k, beta_k)
+                            k_back = normalize_key(w_k_back, beta_k_back)
+                            action[k_back] = action.get(k_back, sp.Integer(0)) + c
+                        
+                        # Find higher term
+                        key_higher = None
+                        coeff_higher = None
+                        for k, c in action.items():
+                            w_k, beta_k = denormalize_key(k)
+                            if self.ell_wtilde(w_k, beta_k) > ell:
+                                key_higher = k
+                                coeff_higher = c
+                        
+                        if key_higher is None:
+                            continue
+                        
+                        c_expanded = sp.expand(coeff_higher)
+                        if c_expanded != 1 and c_expanded != -1:
+                            continue
+                        
+                        if key_higher in bar_table:
+                            continue
+                        
+                        # Check correction terms available
+                        can_compute = True
+                        for k_other in action:
+                            if k_other != key_higher and k_other not in bar_table:
+                                can_compute = False
+                                break
+                        
+                        if not can_compute:
+                            continue
+                        
+                        # bar(T_s · T_{w̃}) = bar(T_s) · bar(T_{w̃})
+                        bar_w = bar_table[key]
+                        
+                        # T_s · bar(T_{w̃}) via anti-automorphism
+                        Ts_left_bar_w = {}
+                        for k, c in bar_w.items():
+                            w_k, beta_k = denormalize_key(k)
+                            w_k_inv, beta_k_inv = tilde_inverse(w_k, beta_k)
+                            action_k = self.right_action_basis_simple((w_k_inv, beta_k_inv), s_idx)
+                            for k2, c2 in action_k.items():
+                                w_k2, beta_k2 = denormalize_key(k2)
+                                w_k2_back, beta_k2_back = tilde_inverse(w_k2, beta_k2)
+                                k2_back = normalize_key(w_k2_back, beta_k2_back)
+                                Ts_left_bar_w[k2_back] = Ts_left_bar_w.get(k2_back, sp.Integer(0)) + c * c2
+                        
+                        result = {}
+                        for k, c in Ts_left_bar_w.items():
+                            result[k] = result.get(k, sp.Integer(0)) + q * c
+                        for k, c in bar_w.items():
+                            result[k] = result.get(k, sp.Integer(0)) + (q - 1) * c
+                        
+                        for k_other, a_other in action.items():
+                            if k_other == key_higher:
+                                continue
+                            if k_other not in bar_table:
+                                continue
+                            bar_other = bar_table[k_other]
+                            a_bar = self.bar_coeff(a_other)
+                            for k, c in bar_other.items():
+                                result[k] = result.get(k, sp.Integer(0)) - a_bar * c
+                        
+                        if c_expanded == -1:
+                            result = {k: -c for k, c in result.items()}
+                        
+                        result = {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
+                        bar_table[key_higher] = result
+                        
+                        if verbose:
+                            w_h, beta_h = denormalize_key(key_higher)
+                            print(f"    bar(T_[{w_h},{beta_h}]) from T_s{s_idx} · T_[{w},{beta}] (left)")
+        
+        # Step 4: Verify all elements are reached
+        missing = []
+        for key in self._basis:
+            if key not in bar_table:
+                missing.append(key)
+        
+        if verbose:
+            print(f"\nStep 4: Verification")
+            print(f"  Total basis elements: {len(self._basis)}")
+            print(f"  Elements with bar computed: {len(bar_table)}")
+            if missing:
+                print(f"  MISSING elements ({len(missing)}):")
+                for key in missing[:5]:
+                    w, beta = denormalize_key(key)
+                    print(f"    T_[{w},{beta}]")
+                if len(missing) > 5:
+                    print(f"    ... and {len(missing) - 5} more")
             else:
-                # bar(H_{w_i}) = H̃_{w_i} + v H̃_{w_{i-1}}
-                # Express in H basis using H̃ -> H formulas
-                
-                # H̃_{w_i} contribution
-                for j, c in H_tilde_in_H[i].items():
-                    key_j = special_keys[j]
-                    result[key_j] = result.get(key_j, sp.Integer(0)) + c
-                
-                # v * H̃_{w_{i-1}} contribution
-                for j, c in H_tilde_in_H[i-1].items():
-                    key_j = special_keys[j]
-                    result[key_j] = result.get(key_j, sp.Integer(0)) + v * c
-            
-            # Simplify coefficients
-            self._bar_cache[key_i] = {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
+                print("  All elements reached!")
+        
+        return bar_table
+
+    def bar_T(self, element):
+        """
+        Compute the bar involution of an element in the T-basis.
+
+        Uses the pre-computed bar_table from compute_bar_involution.
+        The bar involution on the T-basis is:
+            bar(∑ c_k T_{w̃_k}) = ∑ bar(c_k) bar(T_{w̃_k})
+
+        where:
+        - bar(c) = c|_{v → v^{-1}} (coefficient bar involution)
+        - bar(T_{w̃_k}) is the pre-computed value from bar_table
+
+        This satisfies:
+        - bar(bar(x)) = x (involution property)
+        - bar(v · x) = v^{-1} · bar(x) (semilinearity)
+
+        Args:
+            element: dict mapping (w, beta) keys to coefficients (in T-basis)
+
+        Returns:
+            dict mapping (w, beta) keys to coefficients (in T-basis)
+        """
+        # Ensure bar_table is computed
+        if not hasattr(self, 'bar_table'):
+            self.bar_table = self.compute_bar_involution()
+
+        result = {}
+        for key, coeff in element.items():
+            # Apply coefficient bar: v -> v^{-1}
+            coeff_bar = self.bar_coeff(coeff)
+
+            # Use pre-computed bar(T_{w̃}) from bar_table
+            if key in self.bar_table:
+                bar_basis = self.bar_table[key]
+                for k, c in bar_basis.items():
+                    result[k] = result.get(k, sp.Integer(0)) + coeff_bar * c
+            else:
+                raise ValueError(f"Key {key} not found in bar_table. Run compute_bar_involution() first.")
+
+        return {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
+
+    def bar_H(self, element):
+        """
+        Compute the bar involution of an element in the H-basis.
+        
+        Uses the T-basis bar involution with basis conversion:
+            bar_H(x) = T_to_H(bar_T(H_to_T(x)))
+        
+        Args:
+            element: dict mapping (w, beta) keys to coefficients (in H-basis)
+        
+        Returns:
+            dict mapping (w, beta) keys to coefficients (in H-basis)
+        """
+        t_element = self.H_to_T(element)
+        t_bar = self.bar_T(t_element)
+        return self.T_to_H(t_bar)
 
     def bar_element(self, element):
         """
-        Compute the bar involution of an element in R.
+        Compute the bar involution of an element (alias for bar_T).
         
-        The bar involution satisfies:
-        - bar(v) = v^{-1}
-        - bar(h * r) = bar(h) * bar(r) for h in H, r in R
-        - bar(r * h) = bar(r) * bar(h) for h in H, r in R
-        - bar(H̃_{w_i}) = H̃_{w_i} for special elements
+        Args:
+            element: dict mapping (w, beta) keys to coefficients (in T-basis)
         
-        For a general element, we use the fact that R is generated by the
-        special elements as an H-bimodule.
+        Returns:
+            dict mapping (w, beta) keys to coefficients (in T-basis)
         """
-        self._init_bar_cache()
-        
-        result = {}
-        for key, coeff in element.items():
-            coeff_bar = self.bar_coeff(coeff)
-            bar_basis = self._bar_element_basis(key)
-            for k, c in bar_basis.items():
-                result[k] = result.get(k, 0) + coeff_bar * c
-        
-        return self.regular_coefficient(result)
-
-    def _bar_element_basis(self, key):
-        """
-        Compute bar(H_{w̃}) for a basis element.
-        
-        Uses the recursion through the H-action to express any element
-        in terms of special elements.
-        """
-        self._init_bar_cache()
-        
-        # Check if already computed
-        if key in self._bar_cache:
-            return dict(self._bar_cache[key])
-        
-        w, beta = denormalize_key(key)
-        identity = tuple(range(1, self.n + 1))
-        
-        # If w is identity, this might be a special element
-        if w == identity:
-            # beta should be {1,...,i} for some i to be special
-            beta_sorted = sorted(beta)
-            if beta_sorted == list(range(1, len(beta) + 1)):
-                # This is a special element
-                return dict(self._bar_cache.get(key, {key: sp.Integer(1)}))
-        
-        # For non-special elements, use the recursion
-        # Find a simple reflection s such that ws > w or ws < w
-        # and use the relation with the right action
-        
-        # Strategy: write H_{w̃} = H_{ỹ} * H_s + correction terms
-        # where ỹ is "simpler" (lower in Bruhat order or shorter length)
-        # Then bar(H_{w̃}) = bar(H_{ỹ}) * bar(H_s) + bar(corrections)
-        
-        # For efficiency, we compute this using a different approach:
-        # Express H_{w̃} in terms of special elements by repeated actions
-        
-        # Use the anti-automorphism: (w, beta) <-> (w^{-1}, w(beta))
-        # bar on R is related to this anti-automorphism
-        
-        # Actually, for the bar involution, we use a recursive computation
-        # based on expressing elements via the Hecke algebra action.
-        
-        # A more direct approach: compute using the W-graph structure
-        # The mu-coefficients determine the KL polynomials and hence the bar.
-        
-        # For now, use the defining property with recursion
-        result = self._compute_bar_recursive(key)
-        self._bar_cache[key] = result
-        return result
-
-    def _compute_bar_recursive(self, key):
-        """
-        Compute bar(H_{w̃}) using the anti-automorphism and Hecke algebra bar.
-        
-        The bar involution on R uses:
-        1. The anti-automorphism: (w, β)^{-1} = (w^{-1}, w(β))
-        2. The bar involution on coefficients: v → v^{-1}
-        3. The bar on the Hecke algebra: bar(T_w) = T_{w^{-1}}^{-1}|_{v→v^{-1}}
-        
-        For the bimodule, we use that elements can be expressed via Hecke actions
-        on special elements, and the bar is compatible with these actions.
-        """
-        w, beta = denormalize_key(key)
-        n = self.n
-        identity = tuple(range(1, n + 1))
-        
-        # Check if this is a special element
-        if w == identity:
-            beta_sorted = sorted(beta)
-            if beta_sorted == list(range(1, len(beta) + 1)):
-                return dict(self._bar_cache.get(key, {key: sp.Integer(1)}))
-        
-        # For non-special elements, use the tilde_inverse anti-automorphism
-        # combined with the bar on the Hecke algebra
-        #
-        # The key relation: there's an anti-automorphism ι on R such that
-        # ι(T_{w̃}) = T_{w̃^{-1}} where w̃^{-1} = (w^{-1}, w(β))
-        #
-        # The bar involution satisfies: bar(r) = ι(r)|_{v→v^{-1}} (approximately)
-        # with corrections for the T vs H basis
-        
-        # Get the tilde-inverse: (w^{-1}, w(β))
-        w_inv, beta_inv = tilde_inverse(w, beta)
-        key_inv = normalize_key(w_inv, beta_inv)
-        
-        # For the H-basis: H_{w̃} = (-v)^{-ℓ(w̃)} T_{w̃}
-        # The anti-automorphism preserves length (since ℓ(w) = ℓ(w^{-1}))
-        # and |β| = |w(β)|
-        
-        ell = self.ell_wtilde(w, beta)
-        
-        # bar(H_{w̃}) involves H_{w̃^{-1}} with appropriate coefficient adjustments
-        # The exact formula depends on the structure
-        
-        # For elements where w̃^{-1} is also in our basis:
-        if key_inv in set(self._basis):
-            # Simple case: bar(H_{w̃}) = H_{w̃^{-1}} + lower order terms
-            # The lower order terms come from the bar on coefficients
-            return {key_inv: sp.Integer(1)}
-        
-        # If w̃^{-1} is not directly in basis, use the recursive approach
-        return self._compute_bar_via_descent(key)
-    
-    def _compute_bar_via_descent(self, key):
-        """
-        Compute bar(H_{w̃}) using descent recursion.
-        
-        Uses the relation: if i is a right descent of w, then
-        H_{w̃} can be related to H_{w̃*s_i} via the Hecke action.
-        """
-        w, beta = denormalize_key(key)
-        n = self.n
-        identity = tuple(range(1, n + 1))
-        
-        # Find a right descent: i such that w(i) > w(i+1)
-        descent_i = None
-        for i in range(1, n):
-            if w[i-1] > w[i]:
-                descent_i = i
-                break
-        
-        if descent_i is None:
-            # w is identity, handle separately
-            return self._compute_bar_for_identity_w(key)
-        
-        # Use the tilde-inverse as the base for bar
-        w_inv, beta_inv = tilde_inverse(w, beta)
-        key_inv = normalize_key(w_inv, beta_inv)
-        
-        # Check if the inverse is in our basis
-        if key_inv in set(self._basis):
-            return {key_inv: sp.Integer(1)}
-        
-        # Otherwise return identity (placeholder for complex cases)
-        return {key: sp.Integer(1)}
-    
-    def _compute_bar_for_identity_w(self, key):
-        """
-        Compute bar(H_{w̃}) when w = identity.
-        
-        For w = id, w̃^{-1} = (id, β) since id^{-1} = id and id(β) = β.
-        So bar(H_{(id,β)}) = H_{(id,β)} + corrections.
-        """
-        w, beta = denormalize_key(key)
-        n = self.n
-        identity = tuple(range(1, n + 1))
-        
-        # Check if this is a special element
-        beta_sorted = sorted(beta)
-        if beta_sorted == list(range(1, len(beta) + 1)):
-            return dict(self._bar_cache.get(key, {key: sp.Integer(1)}))
-        
-        # For non-special (id, β), the bar is more complex
-        # Use the relation with special elements
-        
-        # For now, use the tilde_inverse which for id is just (id, β)
-        return {key: sp.Integer(1)}
+        return self.bar_T(element)
 
     def regular_coefficient(self, element):
         """Remove zero coefficients from element."""
@@ -858,22 +962,22 @@ class HeckeRB:
 
     def format_element(self, element, use_H_basis=True):
         """
-        Format an element for pretty printing.
-        
+        Format an element for pretty printing with colored partitions.
+
         Args:
             element: dict mapping keys to coefficients
-            use_H_basis: if True, show as H_{w̃}, else as T_{w̃}
+            use_H_basis: if True, show as H_{w̃}, else as T_{w̃} (prefix is omitted)
         """
         if not element:
             return "0"
-        
+
         terms = []
         for key in sorted(element.keys(), key=lambda k: (self.ell_wtilde(*denormalize_key(k)), k)):
             w, beta = denormalize_key(key)
             coeff = sp.expand(element[key])
             if coeff == 0:
                 continue
-            
+
             # Format coefficient
             if coeff == 1:
                 coeff_str = ""
@@ -881,32 +985,31 @@ class HeckeRB:
                 coeff_str = "-"
             else:
                 coeff_str = f"({self._format_laurent(coeff)})"
-            
-            # Format basis element
-            w_str = "".join(str(x) for x in w)
-            beta_str = "{" + ",".join(str(x) for x in sorted(beta)) + "}"
+
+            # Format basis element with colored partition
+            wtilde_str = self._format_wtilde(w, beta)
             if use_H_basis:
-                basis_str = f"H_[{w_str},{beta_str}]"
+                basis_str = f"H[{wtilde_str}]"
             else:
-                basis_str = f"T_[{w_str},{beta_str}]"
-            
+                basis_str = f"[{wtilde_str}]"
+
             if coeff_str == "":
                 terms.append(basis_str)
             elif coeff_str == "-":
                 terms.append(f"-{basis_str}")
             else:
                 terms.append(f"{coeff_str}{basis_str}")
-        
+
         if not terms:
             return "0"
-        
+
         result = terms[0]
         for t in terms[1:]:
             if t.startswith("-"):
                 result += f" {t}"
             else:
                 result += f" + {t}"
-        
+
         return result
 
     def _format_laurent(self, expr):
@@ -933,8 +1036,6 @@ class HeckeRB:
         - H̃_{w̃} = H̃_{w̃} (bar-invariant)
         - H̃_{w̃} = H_{w̃} + ∑_{ỹ < w̃} P_{w̃,ỹ} H_{ỹ} with P_{w̃,ỹ} ∈ v^{-1}Z[v^{-1}]
         """
-        self._init_bar_cache()
-        
         # Sort elements by length
         elements_by_length = {}
         for key in self._basis:
@@ -1029,60 +1130,62 @@ class HeckeRB:
     def print_hecke_action(self, i, max_elements=10):
         """
         Print the right action of T_{s_i} on basis elements.
-        
+
         Args:
             i: index of simple reflection s_i
             max_elements: maximum number of elements to display
         """
-        print(f"\nRight action of T_{{s_{i}}} on T-basis:")
+        print(f"\nRight action of s_{i} on basis:")
         print("-" * 60)
-        
+
         count = 0
         for key in self._basis:
             if count >= max_elements:
                 print(f"  ... ({len(self._basis) - count} more elements)")
                 break
-            
+
             w, beta = denormalize_key(key)
             element = {key: sp.Integer(1)}
             result = self.right_action_simple(element, i)
-            
+
             # Format the result
-            lhs = f"T_[{self._format_wtilde(w, beta)}]"
+            lhs = f"[{self._format_wtilde(w, beta)}]"
             rhs = self._format_T_element(result)
-            print(f"  {lhs} · T_{{s_{i}}} = {rhs}")
+            print(f"  {lhs} · s_{i} = {rhs}")
             count += 1
 
     def _format_wtilde(self, w, beta):
-        """Format (w, β) for display."""
-        w_str = "".join(str(x) for x in w)
-        beta_str = "{" + ",".join(str(x) for x in sorted(beta)) + "}"
-        return f"{w_str},{beta_str}"
+        """Format (w, β) for display with colored partition using str_colored_partition from RB.py."""
+        # Use the str_colored_partition function from RB.py
+        colored_w = str_colored_partition(w, beta)
+        # Remove parentheses and commas to get just the colored permutation values
+        colored_w = colored_w.replace("(", "").replace(")", "").replace(", ", "")
+        return colored_w
 
     def _format_T_element(self, element):
-        """Format an element in the T-basis."""
+        """Format an element in the T-basis, omitting the T_ prefix."""
         if not element:
             return "0"
-        
+
         terms = []
         for key in sorted(element.keys()):
             w, beta = denormalize_key(key)
             coeff = sp.expand(element[key])
             if coeff == 0:
                 continue
-            
+
             wtilde_str = self._format_wtilde(w, beta)
             if coeff == 1:
-                terms.append(f"T_[{wtilde_str}]")
+                terms.append(f"[{wtilde_str}]")
             elif coeff == -1:
-                terms.append(f"-T_[{wtilde_str}]")
+                terms.append(f"-[{wtilde_str}]")
             else:
                 coeff_str = str(coeff).replace("**", "^")
-                terms.append(f"({coeff_str})T_[{wtilde_str}]")
-        
+                terms.append(f"({coeff_str})[{wtilde_str}]")
+
         if not terms:
             return "0"
-        
+
         result = terms[0]
         for t in terms[1:]:
             if t.startswith("-"):
@@ -1094,113 +1197,107 @@ class HeckeRB:
     def verify_bar_involution(self, max_elements=10):
         """
         Verify the bar involution: bar(bar(x)) = x for basis elements.
-        
+
         Returns:
             bool: True if all verified elements satisfy bar(bar(x)) = x
         """
-        self._init_bar_cache()
-        
         print(f"\nVerifying bar involution (bar ∘ bar = id):")
         print("-" * 60)
-        
+
         all_ok = True
         count = 0
-        
+
         for key in self._basis:
             if count >= max_elements:
                 break
-            
+
             w, beta = denormalize_key(key)
-            
-            # Compute bar(H_{w̃})
-            H_wtilde = {key: sp.Integer(1)}
-            bar_H = self.bar_element(H_wtilde)
-            
-            # Compute bar(bar(H_{w̃}))
-            bar_bar_H = self.bar_element(bar_H)
-            
-            # Check if bar(bar(H_{w̃})) = H_{w̃}
-            is_ok = self.is_equal(bar_bar_H, H_wtilde)
-            
+
+            # Compute bar(T_{w̃})
+            T_wtilde = {key: sp.Integer(1)}
+            bar_T = self.bar_T(T_wtilde)
+
+            # Compute bar(bar(T_{w̃}))
+            bar_bar_T = self.bar_T(bar_T)
+
+            # Check if bar(bar(T_{w̃})) = T_{w̃}
+            is_ok = self.is_equal(bar_bar_T, T_wtilde)
+
             status = "✓" if is_ok else "✗"
             wtilde_str = self._format_wtilde(w, beta)
-            print(f"  bar(bar(H_[{wtilde_str}])) = H_[{wtilde_str}]: {status}")
-            
+            print(f"  bar(bar([{wtilde_str}])) = [{wtilde_str}]: {status}")
+
             if not is_ok:
                 all_ok = False
-                print(f"    bar(H) = {self._format_T_element(bar_H)}")
-                print(f"    bar(bar(H)) = {self._format_T_element(bar_bar_H)}")
-            
+                print(f"    bar = {self._format_T_element(bar_T)}")
+                print(f"    bar(bar) = {self._format_T_element(bar_bar_T)}")
+
             count += 1
-        
+
         if count < len(self._basis):
             print(f"  ... ({len(self._basis) - count} more elements)")
-        
+
         return all_ok
 
     def compute_bar_on_basis(self):
         """
-        Compute and cache bar(H_{w̃}) for all basis elements.
+        Compute bar(T_{w̃}) for all basis elements.
         
         Returns:
-            dict: mapping key -> bar(H_{key}) as element dict
+            dict: mapping key -> bar(T_{key}) as element dict
         """
-        self._init_bar_cache()
-        
         bar_table = {}
         for key in self._basis:
-            H_wtilde = {key: sp.Integer(1)}
-            bar_H = self.bar_element(H_wtilde)
-            bar_table[key] = bar_H
+            T_wtilde = {key: sp.Integer(1)}
+            bar_T = self.bar_T(T_wtilde)
+            bar_table[key] = bar_T
         
         return bar_table
 
     def print_bar_involution_table(self, max_elements=10):
-        """Print the bar involution on basis elements."""
-        self._init_bar_cache()
-        
-        print(f"\nBar involution on H-basis:")
+        """Print the bar involution on basis elements (omitting T_ prefix)."""
+        print(f"\nBar involution on basis:")
         print("-" * 60)
-        
+
         count = 0
         for key in self._basis:
             if count >= max_elements:
                 print(f"  ... ({len(self._basis) - count} more elements)")
                 break
-            
+
             w, beta = denormalize_key(key)
-            H_wtilde = {key: sp.Integer(1)}
-            bar_H = self.bar_element(H_wtilde)
-            
+            T_wtilde = {key: sp.Integer(1)}
+            bar_T = self.bar_T(T_wtilde)
+
             wtilde_str = self._format_wtilde(w, beta)
-            bar_str = self.format_element(bar_H)
-            print(f"  bar(H_[{wtilde_str}]) = {bar_str}")
+            bar_str = self._format_T_element(bar_T)
+            print(f"  bar([{wtilde_str}]) = {bar_str}")
             count += 1
 
     def print_canonical_basis(self, max_elements=None):
         """Print the canonical basis elements H̃_{w̃} in the H basis."""
         if not hasattr(self, '_C_tilde') or not self._C_tilde:
             self.compute_canonical_basis_iterative()
-        
+
         basis = self._C_tilde
-        
+
         print(f"\nCanonical basis elements (H̃_w̃ in H basis):")
         print("-" * 60)
-        
+
         # Sort by length for display
-        sorted_keys = sorted(basis.keys(), 
+        sorted_keys = sorted(basis.keys(),
                             key=lambda k: (self.ell_wtilde(*denormalize_key(k)), k))
-        
+
         if max_elements is None:
             max_elements = len(sorted_keys)
-        
+
         for key in sorted_keys[:max_elements]:
             w, beta = denormalize_key(key)
             ell = self.ell_wtilde(w, beta)
             element_str = self.format_element(basis[key])
             wtilde_str = self._format_wtilde(w, beta)
-            print(f"  H̃_[{wtilde_str}] (ℓ={ell}) = {element_str}")
-        
+            print(f"  H̃[{wtilde_str}] (ℓ={ell}) = {element_str}")
+
         if len(sorted_keys) > max_elements:
             print(f"  ... ({len(sorted_keys) - max_elements} more elements)")
 
@@ -1272,25 +1369,25 @@ class HeckeRB:
         """Print the W-graph edges (where μ ≠ 0)."""
         print(f"\nW-graph edges (ỹ → w̃ where μ(ỹ, w̃) ≠ 0):")
         print("-" * 60)
-        
+
         edges = []
         for w_key in self._basis:
             w, beta_w = denormalize_key(w_key)
-            
+
             lower = self.bruhat_lower_elements(w_key)
             for y_key in lower:
                 y, beta_y = denormalize_key(y_key)
                 mu = self.mu_coefficient(y_key, w_key)
-                
+
                 if mu != 0 and mu != sp.Integer(0):
                     edges.append((y_key, w_key, mu))
-        
+
         # Sort by length difference
         edges.sort(key=lambda e: (
             self.ell_wtilde(*denormalize_key(e[1])) - self.ell_wtilde(*denormalize_key(e[0])),
             e[0], e[1]
         ))
-        
+
         for i, (y_key, w_key, mu) in enumerate(edges[:max_edges]):
             y, beta_y = denormalize_key(y_key)
             w, beta_w = denormalize_key(w_key)
@@ -1298,32 +1395,32 @@ class HeckeRB:
             w_str = self._format_wtilde(w, beta_w)
             ell_diff = self.ell_wtilde(w, beta_w) - self.ell_wtilde(y, beta_y)
             print(f"  [{y_str}] --({mu})--> [{w_str}]  (Δℓ={ell_diff})")
-        
+
         if len(edges) > max_edges:
             print(f"  ... ({len(edges) - max_edges} more edges)")
-        
+
         print(f"\nTotal W-graph edges: {len(edges)}")
 
     def print_special_elements(self):
         """Print information about special elements w_i = (id, {1,...,i})."""
         print(f"\nSpecial elements w_i = (id, {{1,...,i}}):")
         print("-" * 60)
-        
+
         identity = tuple(range(1, self.n + 1))
-        
+
         for i in range(self.n + 1):
             key = self.special_element_key(i)
             w, beta = denormalize_key(key)
             ell = self.ell_wtilde(w, beta)
-            
+
             wtilde_str = self._format_wtilde(w, beta)
             print(f"  w_{i} = [{wtilde_str}], ℓ = {ell}")
-            
+
             # Show H̃_{w_i} in H basis
             if hasattr(self, '_C_tilde') and key in self._C_tilde:
                 h_tilde = self._C_tilde[key]
                 h_str = self.format_element(h_tilde)
-                print(f"       H̃_{{w_{i}}} = {h_str}")
+                print(f"       H̃_{i} = {h_str}")
 
     def print_all_results(self, max_elements=15):
         """Print all computed results in a comprehensive format."""
