@@ -44,3 +44,10 @@ ENV/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Generated files
+rb_table_root_types*
+WGraph*.dot
+WGraph*.svg
+*.dot
+*.svg
