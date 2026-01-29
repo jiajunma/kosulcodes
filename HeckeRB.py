@@ -1013,16 +1013,79 @@ class HeckeRB:
         return result
 
     def _format_laurent(self, expr):
-        """Format a Laurent polynomial in v."""
+        """Format a Laurent polynomial in v with improved readability."""
+        from sympy import Poly, Symbol
+
         expr = sp.expand(expr)
         if expr == 0:
             return "0"
-        
-        # Use sympy's string representation
-        s = str(expr)
-        # Clean up for readability
-        s = s.replace("**", "^")
-        return s
+
+        # Handle simple cases directly
+        if expr == 1:
+            return "1"
+        if expr == -1:
+            return "-1"
+
+        # Convert to a polynomial in v and v^-1
+        # First try to convert to Poly directly
+        try:
+            if isinstance(expr, (int, sp.Integer)):
+                return str(expr)
+
+            # Replace v^-1 with u to handle negative exponents
+            expr_u = expr.subs(v, 1/Symbol('u'))
+            # Multiply by appropriate power of u to clear denominators
+            min_exp = float('inf')
+            for term in expr_u.as_ordered_terms():
+                try:
+                    for factor in term.as_ordered_factors():
+                        if factor.is_Pow and factor.args[0] == Symbol('u'):
+                            exp = factor.args[1]
+                            if exp < 0:
+                                min_exp = min(min_exp, exp)
+                except:
+                    continue
+
+            if min_exp == float('inf'):
+                min_exp = 0
+
+            expr_cleared = expr_u * Symbol('u')**(-min_exp)
+            poly_u = Poly(expr_cleared, Symbol('u'))
+
+            # Format each term
+            terms = []
+            for i, coef in enumerate(poly_u.all_coeffs()):
+                if coef == 0:
+                    continue
+
+                degree = poly_u.degree() - i
+                v_degree = -degree - min_exp  # Convert back to v exponent
+
+                if coef == 1 and v_degree != 0:
+                    coef_str = ""
+                elif coef == -1 and v_degree != 0:
+                    coef_str = "-"
+                else:
+                    coef_str = str(coef)
+
+                if v_degree == 0:
+                    terms.append(coef_str)
+                elif v_degree == 1:
+                    terms.append(f"{coef_str}v")
+                elif v_degree == -1:
+                    terms.append(f"{coef_str}v^{{-1}}")
+                else:
+                    terms.append(f"{coef_str}v^{{{v_degree}}}")
+
+            result = " + ".join([t for t in terms if t])
+            result = result.replace("+ -", "- ")
+            return result
+
+        except Exception as e:
+            # Fall back to basic formatting if the above fails
+            s = str(expr)
+            s = s.replace("**", "^")
+            return s
 
     def compute_canonical_basis_iterative(self):
         """
