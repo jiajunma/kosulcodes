@@ -1548,20 +1548,44 @@ if __name__ == "__main__":
     if verify_bar:
         R.verify_bar_involution(max_elements=15)
     
-    # Verify special elements are bar-invariant
-    print("\nVerifying bar-invariance of special elements...")
+    # Verify canonical basis elements for special elements are bar-invariant
+    print("\nVerifying bar-invariance of canonical basis elements for special elements...")
     identity = tuple(range(1, n + 1))
     all_ok = True
+
+    # Create canonical basis elements for special elements if not already computed
+    if not hasattr(R, '_C_tilde') or not R._C_tilde:
+        R.compute_canonical_basis_iterative()
+
     for i in range(n + 1):
         key = R.special_element_key(i)
-        if key in basis:
-            elem = basis[key]
-            bar_elem = R.bar_element(elem)
-            if R.is_equal(elem, bar_elem):
-                print(f"  H̃_w_{i} is bar-invariant ✓")
-            else:
-                print(f"  H̃_w_{i} is NOT bar-invariant ✗")
+        if key in R._C_tilde:
+            # Get the canonical basis element H̃_w_i
+            canonical_elem = R._C_tilde[key]
+
+            # Apply bar involution (use bar_H for H-basis elements)
+            bar_canonical = R.bar_H(canonical_elem)
+
+            # Check if bar(H̃_w_i) = H̃_w_i
+            is_bar_invariant = R.is_equal(canonical_elem, bar_canonical)
+
+            # Print the result
+            status = "✓" if is_bar_invariant else "✗"
+            print(f"  H̃_{i} is bar-invariant: {status}")
+
+            # For educational purposes, also show the explicit form
+            h_tilde_str = R.format_element(canonical_elem)
+            print(f"    H̃_{i} = {h_tilde_str}")
+
+            if not is_bar_invariant:
                 all_ok = False
+                bar_h_tilde_str = R.format_element(bar_canonical)
+                print(f"    bar(H̃_{i}) = {bar_h_tilde_str}")
+
+    if all_ok:
+        print("\nAll special canonical basis elements are bar-invariant ✓")
+    else:
+        print("\nSome special canonical basis elements are NOT bar-invariant ✗")
     
     if all_ok:
         print("\nAll special elements are bar-invariant ✓")
