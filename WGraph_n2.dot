@@ -1,0 +1,46 @@
+digraph WGraph_n2 {
+    rankdir=TB;
+    node [shape=box, fontname="Courier"];
+    edge [fontname="Courier"];
+
+    subgraph cluster_ell0 {
+        rank=same;
+        label="ℓ=0";
+        style=dashed;
+        v_12_ [label="12\nτ={}"];
+    }
+
+    subgraph cluster_ell1 {
+        rank=same;
+        label="ℓ=1";
+        style=dashed;
+        v_12_1 [label="12|1\nτ={}"];
+        v_21_ [label="21\nτ={1}"];
+    }
+
+    subgraph cluster_ell2 {
+        rank=same;
+        label="ℓ=2";
+        style=dashed;
+        v_12_12 [label="12|12\nτ={}"];
+        v_21_1 [label="21|1\nτ={1}"];
+        v_21_2 [label="21|2\nτ={1}"];
+    }
+
+    subgraph cluster_ell3 {
+        rank=same;
+        label="ℓ=3";
+        style=dashed;
+        v_21_12 [label="21|12\nτ={1}"];
+    }
+
+    // Edges
+    v_12_ -> v_12_1;
+    v_12_ -> v_21_;
+    v_21_ -> v_21_1;
+    v_12_1 -> v_21_1;
+    v_21_ -> v_21_2;
+    v_12_1 -> v_21_2;
+    v_21_1 -> v_21_12;
+    v_21_2 -> v_21_12;
+}
