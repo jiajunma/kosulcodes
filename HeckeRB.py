@@ -522,17 +522,20 @@ class HeckeRB:
                         action = self.left_action_T_w({key: sp.Integer(1)}, simple_reflection(s_idx, self.n))
 
                         # Find higher term
-                        key_higher = None
-                        coeff_higher = None
+                        key_higher = []
+                        coeff_higher = [] 
                         for k, c in action.items():
                             w_k, beta_k = denormalize_key(k)
                             if self.ell_wtilde(w_k, beta_k) > ell:
-                                key_higher = k
-                                coeff_higher = c
+                                key_higher.append(k)
+                                coeff_higher.append(c)
 
-                        if key_higher is None:
+                        if not key_higher:
                             continue
 
+                        assert len(key_higher) == 1, f"Expected one higher term, got {len(key_higher)} in T_s{s_idx} · T_[{w},{beta}]"
+
+                        key_higher, coeff_higher = key_higher[0], coeff_higher[0]
                         c_expanded = sp.expand(coeff_higher)
                         assert c_expanded == 1, f"Expected coefficient 1 for higher term, got {c_expanded} in T_s{s_idx} · T_[{w},{beta}]"
 
