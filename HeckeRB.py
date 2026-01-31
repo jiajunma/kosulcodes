@@ -429,8 +429,7 @@ class HeckeRB:
             # Coefficient of T_{w_j} for j < i: (v^{-2i} - v^{-2i+2})
             for j in range(i):
                 key_j = special_keys[j]
-                coeff = v ** (-2 * i) - v ** (-2 * i + 2)
-                bar_i[key_j] = coeff
+                bar_i[key_j] = v ** (-2 * i) - v ** (-2 * i + 2)
             
             #bar_i = {k: sp.expand(c) for k, c in bar_i.items() if sp.expand(c) != 0}
             bar_table[key_i] = bar_i
@@ -443,7 +442,7 @@ class HeckeRB:
         if verbose:
             print("\nStep 3: Iterating by length")
         
-        # bar(T_s) in Hecke algebra = q T_s + (q-1) = v^2 T_s + (v^2 - 1)
+        # bar(T_s) in Hecke algebra = q^{-1} T_s + (q^{-1}-1) = v^(-2) T_s + (v^(-2) - 1)
         
         for ell in range(max_length):
                 # Process all elements of length ell with known bar
@@ -452,7 +451,7 @@ class HeckeRB:
                     
                     w, beta = denormalize_key(key)
                     
-                    # Try each simple reflection
+                    # Try each simple reflection on right action
                     for s_idx in range(1, self.n):
                         # Compute T_{w̃} · T_s
                         action = self.right_action_basis_simple((w, beta), s_idx)
@@ -491,7 +490,7 @@ class HeckeRB:
                         # Compute bar(T_{w̃''})
                         bar_w = bar_table[key]
                         
-                        # bar(T_{w̃}) · bar(T_s) = bar(T_{w̃}) · (q T_s + (q-1))
+                        # bar(T_{w̃}) · bar(T_s) = bar(T_{w̃}) · (q^{-1} T_s + (q^{-1}-1))
                         bar_w_times_Ts = self.right_action_simple(bar_w, s_idx)
                         
                         result = {}
@@ -543,10 +542,8 @@ class HeckeRB:
                             continue
 
                         # Check correction terms available
-                        can_compute = True
                         for k_other in action:
                             if k_other != key_higher and k_other not in bar_table:
-                                can_compute = False
                                 raise ValueError(f"bar_table missing required key {k_other} for computation of bar({key_higher})")
 
                         # bar(T_s · T_{w̃}) = bar(T_s) · bar(T_{w̃})
@@ -555,12 +552,22 @@ class HeckeRB:
                         # T_s · bar(T_{w̃}) via anti-automorphism
                         Ts_left_bar_w = self.left_action_T_w(bar_w, simple_reflection(s_idx, self.n))
 
-                        # Apply the same formula as in the right action case: bar(T_s) = q T_s + (q-1)
+                        # Apply the same formula as in the right action case: bar(T_s) = q^{-1} T_s + (q^{-1}-1)
                         result = {}
                         for k, c in Ts_left_bar_w.items():
                             result[k] = v**(-2) * c
                         for k, c in bar_w.items():
                             result[k] = result.get(k, sp.Integer(0)) + (v**(-2) - 1) * c
+
+                        # Subtract bar(a) * bar(T_{w̃'}) for w̃' ≠ w̃''
+                        for k_other, a_other in action.items():
+                            if k_other == key_higher:
+                                continue
+                            bar_other = bar_table[k_other]
+                            a_bar = self.bar_coeff(a_other)
+                            for k, c in bar_other.items():
+                                result[k] = result.get(k, sp.Integer(0)) - a_bar * c
+
 
                         result = {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
                         bar_table[key_higher] = result
@@ -1217,9 +1224,9 @@ class HeckeRB:
                 wtilde_str = self._format_wtilde(w, beta)
                 print(f"  bar(bar([{wtilde_str}])) = [{wtilde_str}]: {status}")
 
-                if not is_ok:
-                    print(f"    bar = {self._format_T_element(bar_T)}")
-                    print(f"    bar(bar) = {self._format_T_element(bar_bar_T)}")
+                if  not is_ok:
+                    print(f"    bar([{wtilde_str}]) = {self._format_T_element(bar_T)}")
+                    print(f"    bar(bar([{wtilde_str}])) = {self._format_T_element(bar_bar_T)}")
                 count += 1
 
         if count < len(self._basis):
