@@ -60,52 +60,49 @@ class HeckeRB:
         Returns:
             dict mapping (w,beta) keys to coefficients in q.
         """
-        key = (normalize_key(*wtilde), i)
+        s = simple_reflection(i, self.n)
+        key = (normalize_key(*wtilde), s)
         if key in self._right_action_cache:
             return dict(self._right_action_cache[key])
         w, beta = wtilde
-        n = len(w)
-        s = simple_reflection(i, n)
-        ws = permutation_prod(w, s)
-        l_w = length_of_permutation(w)
-        l_ws = length_of_permutation(ws)
-
         beta = set(beta)
         wtilde_s = right_action_rb(wtilde, s)
         ws, ws_beta = wtilde_s
 
+        l_w = length_of_permutation(w)
+        l_ws = length_of_permutation(ws)
+
         sigma = beta_to_sigma(w, beta)
         sigma_prime = beta_to_sigma(ws, ws_beta)
+
         def wprime(wtilde):
-            return (wtilde[0], set(wtilde[1]).symmetric_difference({i + 1}))
+            w, beta = wtilde
+            return (w, set(beta).symmetric_difference({i + 1}))
 
         iota = {i, i + 1}
         result = {}
-
-        wtilde_s_prime = wprime(wtilde_s)
-        wtilde_prime = wprime(wtilde)
-        wtilde_prime_s = right_action_rb(wtilde_prime, s)
         
         if l_ws > l_w:
             if (i + 1) not in sigma_prime:
-                self._add_monomial(result, wtilde_s, sp.Integer(1))
+                result[normalize_key(*wtilde_s)] = sp.Integer(1)
             else:
-                self._add_monomial(result, wtilde_s, sp.Integer(1))
-                self._add_monomial(result, wtilde_s_prime, sp.Integer(1))
+                wtilde_s_prime = wprime(wtilde_s)
+                result[normalize_key(*wtilde_s)] = sp.Integer(1) 
+                result[normalize_key(*wtilde_s_prime)] = sp.Integer(1) 
         else:  # l_ws < l_w
-            if (beta & iota) == {i}:
-                self._add_monomial(result, wtilde_prime, sp.Integer(1))
-                self._add_monomial(result, wtilde_prime_s, sp.Integer(1))
-            elif i not in sigma or (i + 1) in (beta - sigma):
-                self._add_monomial(result, wtilde, q - 1)
-                self._add_monomial(result, wtilde_s, q)
-            elif iota.issubset(sigma):
-                self._add_monomial(result, wtilde, q - 2)
-                self._add_monomial(result, wtilde_prime, q - 1)
-                self._add_monomial(result, wtilde_s, q - 1)
+            wtilde_prime = wprime(wtilde)
+            if i in beta and (i+1) not in beta:
+                wtilde_prime_s = right_action_rb(wtilde_prime, s)
+                result[normalize_key(*wtilde_prime)] = sp.Integer(1)
+                result[normalize_key(*wtilde_prime_s)] = sp.Integer(1)
+            elif i in sigma and (i+1) in sigma:
+                result[normalize_key(*wtilde)] = q - 2  
+                result[normalize_key(*wtilde_prime)] = q - 1 
+                result[normalize_key(*wtilde_s)] = q - 1
             else:
-                raise Exception("Right action case not covered by the formula.")
-        self._right_action_cache[key] = dict(result)
+                result[normalize_key(*wtilde)] = q - 1
+                result[normalize_key(*wtilde_s)] = q 
+        self._right_action_cache[key] = result 
         return result
 
 
@@ -119,59 +116,81 @@ class HeckeRB:
                 result[k] = result.get(k, 0) + coeff * c
         return result
 
-    def right_action_H_simple(self, element, i):
-        """
-        Right action by H_{s_i} on an element in the H-basis.
-        
-        H_{s_i} = (-v)^{-1} T_{s_i}, so:
-        element · H_{s_i} = (-v)^{-1} (element · T_{s_i})
-        
-        But we need to convert between H and T bases properly.
-        For H_{w̃} = (-v)^{-ℓ(w̃)} T_{w̃}:
-        H_{w̃} · H_s in H-basis involves the action of T_s and length changes.
-        """
-        result = {}
-        for key, coeff in element.items():
-            w, beta = denormalize_key(key)
-            ell_w = self.ell_wtilde(w, beta)
-            
-            # H_{w̃} · H_s = (-v)^{-ℓ(w̃)} T_{w̃} · (-v)^{-1} T_s
-            #             = (-v)^{-ℓ(w̃)-1} T_{w̃} · T_s
-            
-            # Compute T_{w̃} · T_s
-            action_T = self.right_action_basis_simple((w, beta), i)
-            
-            for k, c in action_T.items():
-                w2, beta2 = denormalize_key(k)
-                ell_w2 = self.ell_wtilde(w2, beta2)
-                
-                # T_{w̃} · T_s = ∑ c_k T_{w̃_k}
-                # H_{w̃} · H_s = (-v)^{-ℓ(w̃)-1} ∑ c_k T_{w̃_k}
-                #             = ∑ c_k (-v)^{-ℓ(w̃)-1} T_{w̃_k}
-                #             = ∑ c_k (-v)^{-ℓ(w̃)-1} (-v)^{ℓ(w̃_k)} H_{w̃_k}
-                #             = ∑ c_k (-v)^{ℓ(w̃_k)-ℓ(w̃)-1} H_{w̃_k}
-                
-                h_coeff = coeff * c * ((-v) ** (ell_w2 - ell_w - 1))
-                result[k] = result.get(k, sp.Integer(0)) + h_coeff
-        
-        return {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
+    # def right_action_H_simple(self, element, i):
+    #     """
+    #     Right action by H_{s_i} on an element in the H-basis.
+    #     
+    #     H_{s_i} = (-v)^{-1} T_{s_i}, so:
+    #     element · H_{s_i} = (-v)^{-1} (element · T_{s_i})
+    #     
+    #     But we need to convert between H and T bases properly.
+    #     For H_{w̃} = (-v)^{-ℓ(w̃)} T_{w̃}:
+    #     H_{w̃} · H_s in H-basis involves the action of T_s and length changes.
+    #     """
+    #     result = {}
+    #     for key, coeff in element.items():
+    #         w, beta = denormalize_key(key)
+    #         ell_w = self.ell_wtilde(w, beta)
+    #         
+    #         # H_{w̃} · H_s = (-v)^{-ℓ(w̃)} T_{w̃} · (-v)^{-1} T_s
+    #         #             = (-v)^{-ℓ(w̃)-1} T_{w̃} · T_s
+    #         
+    #         # Compute T_{w̃} · T_s
+    #         action_T = self.right_action_basis_simple((w, beta), i)
+    #         
+    #         for k, c in action_T.items():
+    #             w2, beta2 = denormalize_key(k)
+    #             ell_w2 = self.ell_wtilde(w2, beta2)
+    #             
+    #             # T_{w̃} · T_s = ∑ c_k T_{w̃_k}
+    #             # H_{w̃} · H_s = (-v)^{-ℓ(w̃)-1} ∑ c_k T_{w̃_k}
+    #             #             = ∑ c_k (-v)^{-ℓ(w̃)-1} T_{w̃_k}
+    #             #             = ∑ c_k (-v)^{-ℓ(w̃)-1} (-v)^{ℓ(w̃_k)} H_{w̃_k}
+    #             #             = ∑ c_k (-v)^{ℓ(w̃_k)-ℓ(w̃)-1} H_{w̃_k}
+    #             
+    #             h_coeff = coeff * c * ((-v) ** (ell_w2 - ell_w - 1))
+    #             result[k] = result.get(k, sp.Integer(0)) + h_coeff
+    #     
+    #     return {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
 
 
 
     def right_action_basis_by_w(self, wtilde, w):
+        """
+        Compute the right action of T_w on a basis element T_{wtilde}.
+
+        Args:
+            wtilde: tuple (w, beta) representing the basis element
+            w: permutation to act by
+
+        Returns:
+            Dictionary mapping basis elements to their coefficients
+        """
         key = (normalize_key(*wtilde), tuple(w))
+        # Check if result is already in cache
         if key in self._right_action_cache:
             return dict(self._right_action_cache[key])
-        i  = right_descending_element(w)
+
+        # Base case: w is identity
+        i = right_descending_element(w)
         if i is None:
             element = {normalize_key(*wtilde): sp.Integer(1)}
-            self._right_action_cache[key] = dict(element)
             return element
+
+        # Recursive case: factor w = w_prev * s_i
         s = simple_reflection(i, self.n)
         w_prev = permutation_prod(w, s)
+        assert permutation_prod(w_prev, s) == tuple(w), f"permutation_prod(w_prev, s) = {permutation_prod(w_prev, s)} != {w}"
+
+
+        # Compute T_{wtilde} * T_{w_prev} recursively
         element = self.right_action_basis_by_w(wtilde, w_prev)
+
+        # Then right action by T_{s_i} to get T_{wtilde} * T_{w_prev} * T_{s_i} = T_{wtilde} * T_w
         result = self.right_action_simple(element, i)
-        self._right_action_cache[key] = dict(result)
+
+        # Cache and return the result
+        self._right_action_cache[key] = result
         return result
 
     def right_action_T_w(self, element, w):
@@ -187,9 +206,6 @@ class HeckeRB:
         return result
 
 
-    def basis_element(self, w, beta):
-        return {normalize_key(w, beta): sp.Integer(1)}
-
     def ell_wtilde(self, w, beta):
         """
         Length of w~ = (w, beta), using ell(w) + |beta|.
@@ -201,6 +217,10 @@ class HeckeRB:
         Standard basis element T_{w~}.
         """
         return {normalize_key(w, beta): sp.Integer(1)}
+
+    def basis_element(self, w, beta):
+        return self.T_wtilde(w, beta)
+
 
     def H_wtilde(self, w, beta):
         """
@@ -410,9 +430,9 @@ class HeckeRB:
             for j in range(i):
                 key_j = special_keys[j]
                 coeff = v ** (-2 * i) - v ** (-2 * i + 2)
-                bar_i[key_j] = bar_i.get(key_j, sp.Integer(0)) + coeff
+                bar_i[key_j] = coeff
             
-            bar_i = {k: sp.expand(c) for k, c in bar_i.items() if sp.expand(c) != 0}
+            #bar_i = {k: sp.expand(c) for k, c in bar_i.items() if sp.expand(c) != 0}
             bar_table[key_i] = bar_i
             
             if verbose:
@@ -425,21 +445,10 @@ class HeckeRB:
         
         # bar(T_s) in Hecke algebra = q T_s + (q-1) = v^2 T_s + (v^2 - 1)
         
-        for ell in range(max_length + 1):
-            # Multiple passes to ensure all elements at this length are computed
-            prev_count = -1
-            while len(bar_table) > prev_count:
-                prev_count = len(bar_table)
-                
-                if verbose:
-                    computed_at_ell = sum(1 for k in elements_by_length.get(ell, []) if k in bar_table)
-                    total_at_ell = len(elements_by_length.get(ell, []))
-                    print(f"\n  Length {ell}: {computed_at_ell}/{total_at_ell} computed")
-                
+        for ell in range(max_length):
                 # Process all elements of length ell with known bar
                 for key in elements_by_length.get(ell, []):
-                    if key not in bar_table:
-                        continue
+                    assert key in bar_table, f"bar_table missing key {key}"
                     
                     w, beta = denormalize_key(key)
                     
@@ -452,86 +461,66 @@ class HeckeRB:
                         higher_terms = []
                         
                         for k, c in action.items():
-                            w_k, beta_k = denormalize_key(k)
-                            ell_k = self.ell_wtilde(w_k, beta_k)
+                            ell_k = self.ell_wtilde(*denormalize_key(k))
                             if ell_k > ell:
                                 higher_terms.append((k, c))
                         
                         if len(higher_terms) == 0:
                             continue
-                        
+
+                        if len(higher_terms) > 1:
+                            perm_str = self._format_wtilde(w, beta)
+                            print(f"More than one higher term found in T_[{perm_str}] · T_s{s_idx}: {higher_terms}")
+                            assert False
                         # Check the claim
-                        if len(higher_terms) > 1 and verbose:
-                            print(f"    NOTE: T_[{w},{beta}] · T_s{s_idx} has {len(higher_terms)} higher terms")
                         
-                        for key_higher, coeff_higher in higher_terms:
-                            c_expanded = sp.expand(coeff_higher)
+                        key_higher, coeff_higher = higher_terms[0]
+                        c_expanded = sp.expand(coeff_higher)
                             
-                            # Verify coefficient is ±1
-                            if c_expanded != 1 and c_expanded != -1:
-                                if verbose:
-                                    w_h, beta_h = denormalize_key(key_higher)
-                                    print(f"    CLAIM FAILED: Coeff of T_[{w_h},{beta_h}] is {c_expanded}")
+                        # Verify coefficient is 1
+                        assert c_expanded == 1, f"Expected coefficient 1 for higher term, got {c_expanded} in T_[{self._format_wtilde(w, beta)}] · T_s{s_idx}"
+
+                        if key_higher in bar_table:
+                            continue
+                        
+                        # Check all correction terms are available
+                        for k_other, a_other in action.items():
+                            if k_other != key_higher and k_other not in bar_table:
+                                raise ValueError(f"bar_table missing required key {k_other} for computation of bar({key_higher})")
+                        
+                        # Compute bar(T_{w̃''})
+                        bar_w = bar_table[key]
+                        
+                        # bar(T_{w̃}) · bar(T_s) = bar(T_{w̃}) · (q T_s + (q-1))
+                        bar_w_times_Ts = self.right_action_simple(bar_w, s_idx)
+                        
+                        result = {}
+                        for k, c in bar_w_times_Ts.items():
+                            result[k] = v**(-2) * c
+                        for k, c in bar_w.items():
+                            result[k] = result.get(k, sp.Integer(0)) + (v**(-2) - 1) * c
+                        
+                        # Subtract bar(a) * bar(T_{w̃'}) for w̃' ≠ w̃''
+                        for k_other, a_other in action.items():
+                            if k_other == key_higher:
                                 continue
-                            
-                            if key_higher in bar_table:
-                                continue
-                            
-                            # Check all correction terms are available
-                            can_compute = True
-                            for k_other, a_other in action.items():
-                                if k_other != key_higher and k_other not in bar_table:
-                                    can_compute = False
-                                    break
-                            
-                            if not can_compute:
-                                continue
-                            
-                            # Compute bar(T_{w̃''})
-                            bar_w = bar_table[key]
-                            
-                            # bar(T_{w̃}) · bar(T_s) = bar(T_{w̃}) · (q T_s + (q-1))
-                            bar_w_times_Ts = self.right_action_simple(bar_w, s_idx)
-                            
-                            result = {}
-                            for k, c in bar_w_times_Ts.items():
-                                result[k] = result.get(k, sp.Integer(0)) + q * c
-                            for k, c in bar_w.items():
-                                result[k] = result.get(k, sp.Integer(0)) + (q - 1) * c
-                            
-                            # Subtract bar(a) * bar(T_{w̃'}) for w̃' ≠ w̃''
-                            for k_other, a_other in action.items():
-                                if k_other == key_higher:
-                                    continue
-                                bar_other = bar_table[k_other]
-                                a_bar = self.bar_coeff(a_other)
-                                for k, c in bar_other.items():
-                                    result[k] = result.get(k, sp.Integer(0)) - a_bar * c
-                            
-                            # Divide by coefficient (±1)
-                            if c_expanded == -1:
-                                result = {k: -c for k, c in result.items()}
-                            
-                            result = {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
-                            bar_table[key_higher] = result
-                            
-                            if verbose:
-                                w_h, beta_h = denormalize_key(key_higher)
-                                print(f"    bar(T_[{w_h},{beta_h}]) from T_[{w},{beta}] · T_s{s_idx}")
+                            bar_other = bar_table[k_other]
+                            a_bar = self.bar_coeff(a_other)
+                            for k, c in bar_other.items():
+                                result[k] = result.get(k, sp.Integer(0)) - a_bar * c
+                        
+                        result = {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
+                        bar_table[key_higher] = result
+                        
+                        if verbose:
+                            w_h, beta_h = denormalize_key(key_higher)
+                            print(f"    bar(T_[{w_h},{beta_h}]) from T_[{w},{beta}] · T_s{s_idx}")
                     
                     # Also try left action T_s · T_{w̃} for this element
                     for s_idx in range(1, self.n):
                         # T_s · T_{w̃} = ι(ι(T_{w̃}) · T_s)
-                        w_inv, beta_inv = tilde_inverse(w, beta)
-                        action_inv = self.right_action_basis_simple((w_inv, beta_inv), s_idx)
-                        
-                        action = {}
-                        for k, c in action_inv.items():
-                            w_k, beta_k = denormalize_key(k)
-                            w_k_back, beta_k_back = tilde_inverse(w_k, beta_k)
-                            k_back = normalize_key(w_k_back, beta_k_back)
-                            action[k_back] = action.get(k_back, sp.Integer(0)) + c
-                        
+                        action = self.left_action_T_w({key: sp.Integer(1)}, simple_reflection(s_idx, self.n))
+
                         # Find higher term
                         key_higher = None
                         coeff_higher = None
@@ -540,61 +529,36 @@ class HeckeRB:
                             if self.ell_wtilde(w_k, beta_k) > ell:
                                 key_higher = k
                                 coeff_higher = c
-                        
+
                         if key_higher is None:
                             continue
-                        
+
                         c_expanded = sp.expand(coeff_higher)
-                        if c_expanded != 1 and c_expanded != -1:
-                            continue
-                        
+                        assert c_expanded == 1, f"Expected coefficient 1 for higher term, got {c_expanded} in T_s{s_idx} · T_[{w},{beta}]"
+
                         if key_higher in bar_table:
                             continue
-                        
+
                         # Check correction terms available
                         can_compute = True
                         for k_other in action:
                             if k_other != key_higher and k_other not in bar_table:
                                 can_compute = False
-                                break
-                        
-                        if not can_compute:
-                            continue
-                        
+                                raise ValueError(f"bar_table missing required key {k_other} for computation of bar({key_higher})")
+
                         # bar(T_s · T_{w̃}) = bar(T_s) · bar(T_{w̃})
                         bar_w = bar_table[key]
-                        
+
                         # T_s · bar(T_{w̃}) via anti-automorphism
-                        Ts_left_bar_w = {}
-                        for k, c in bar_w.items():
-                            w_k, beta_k = denormalize_key(k)
-                            w_k_inv, beta_k_inv = tilde_inverse(w_k, beta_k)
-                            action_k = self.right_action_basis_simple((w_k_inv, beta_k_inv), s_idx)
-                            for k2, c2 in action_k.items():
-                                w_k2, beta_k2 = denormalize_key(k2)
-                                w_k2_back, beta_k2_back = tilde_inverse(w_k2, beta_k2)
-                                k2_back = normalize_key(w_k2_back, beta_k2_back)
-                                Ts_left_bar_w[k2_back] = Ts_left_bar_w.get(k2_back, sp.Integer(0)) + c * c2
-                        
+                        Ts_left_bar_w = self.left_action_T_w(bar_w, simple_reflection(s_idx, self.n))
+
+                        # Apply the same formula as in the right action case: bar(T_s) = q T_s + (q-1)
                         result = {}
                         for k, c in Ts_left_bar_w.items():
-                            result[k] = result.get(k, sp.Integer(0)) + q * c
+                            result[k] = v**(-2) * c
                         for k, c in bar_w.items():
-                            result[k] = result.get(k, sp.Integer(0)) + (q - 1) * c
-                        
-                        for k_other, a_other in action.items():
-                            if k_other == key_higher:
-                                continue
-                            if k_other not in bar_table:
-                                continue
-                            bar_other = bar_table[k_other]
-                            a_bar = self.bar_coeff(a_other)
-                            for k, c in bar_other.items():
-                                result[k] = result.get(k, sp.Integer(0)) - a_bar * c
-                        
-                        if c_expanded == -1:
-                            result = {k: -c for k, c in result.items()}
-                        
+                            result[k] = result.get(k, sp.Integer(0)) + (v**(-2) - 1) * c
+
                         result = {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
                         bar_table[key_higher] = result
                         
@@ -607,21 +571,23 @@ class HeckeRB:
         for key in self._basis:
             if key not in bar_table:
                 missing.append(key)
-        
+
+        if len(bar_table) < len(self._basis):
+            # Compose a readable missing list (at most 10 elements shown)
+            missing_info = []
+            for key in missing:
+                w, beta = denormalize_key(key)
+                missing_info.append(f"T_[{w},{beta}]")
+            raise RuntimeError(
+                f"bar_table is missing {len(missing)} out of {len(self._basis)} basis elements.\n"
+                f"First missing: {', '.join(missing_info)}{more}"
+            )
+
         if verbose:
             print(f"\nStep 4: Verification")
             print(f"  Total basis elements: {len(self._basis)}")
             print(f"  Elements with bar computed: {len(bar_table)}")
-            if missing:
-                print(f"  MISSING elements ({len(missing)}):")
-                for key in missing[:5]:
-                    w, beta = denormalize_key(key)
-                    print(f"    T_[{w},{beta}]")
-                if len(missing) > 5:
-                    print(f"    ... and {len(missing) - 5} more")
-            else:
-                print("  All elements reached!")
-        
+            print("  All elements reached!")
         return bar_table
 
     def bar_T(self, element):
@@ -703,11 +669,27 @@ class HeckeRB:
         bar_elem = self.bar_element(element)
         return self.is_equal(element, bar_elem)
 
-    def is_equal(self, element1, element2):
-        """Check if two elements are equal."""
-        e1 = self.regular_coefficient(element1)
-        e2 = self.regular_coefficient(element2)
-        return e1 == e2
+    def is_equal(self, e1, e2):
+        """
+        Check if two elements are equal by verifying that the difference of
+        their coefficients is 0 for all basis elements ~w.
+        """
+        
+        # Get all keys (basis elements ~w) from both elements
+        all_keys = set(e1.keys()) | set(e2.keys())
+
+        # For each basis element ~w, check if c_1(~w) - c_2(~w) = 0
+        for key in all_keys:
+            coeff1 = e1.get(key, sp.Integer(0))
+            coeff2 = e2.get(key, sp.Integer(0))
+            diff = sp.expand(coeff1 - coeff2)
+
+            # If any coefficient difference is not 0, elements are not equal
+            if diff != 0:
+                return False
+
+        # All coefficient differences are 0, elements are equal
+        return True
 
     # =========================================================================
     # W-graph structure (Proposition 9 from the paper)
@@ -1202,10 +1184,14 @@ class HeckeRB:
 
         all_ok = True
         count = 0
+        unstable_count = 0
+        total_checked = 0
 
         for key in self._basis:
-            if count >= max_elements:
-                break
+            total_checked += 1
+
+            # Only print the first max_elements elements
+            show_detail = count < max_elements
 
             w, beta = denormalize_key(key)
 
@@ -1219,19 +1205,25 @@ class HeckeRB:
             # Check if bar(bar(T_{w̃})) = T_{w̃}
             is_ok = self.is_equal(bar_bar_T, T_wtilde)
 
-            status = "✓" if is_ok else "✗"
-            wtilde_str = self._format_wtilde(w, beta)
-            print(f"  bar(bar([{wtilde_str}])) = [{wtilde_str}]: {status}")
-
             if not is_ok:
+                unstable_count += 1
                 all_ok = False
-                print(f"    bar = {self._format_T_element(bar_T)}")
-                print(f"    bar(bar) = {self._format_T_element(bar_bar_T)}")
 
-            count += 1
+            if show_detail:
+                status = "✓" if is_ok else "✗"
+                wtilde_str = self._format_wtilde(w, beta)
+                print(f"  bar(bar([{wtilde_str}])) = [{wtilde_str}]: {status}")
+
+                if not is_ok:
+                    print(f"    bar = {self._format_T_element(bar_T)}")
+                    print(f"    bar(bar) = {self._format_T_element(bar_bar_T)}")
+                count += 1
 
         if count < len(self._basis):
             print(f"  ... ({len(self._basis) - count} more elements)")
+
+        # Print summary statistics
+        print(f"\nSummary: {unstable_count} out of {total_checked} elements are not bar-bar stable ({unstable_count/total_checked:.2%})")
 
         return all_ok
 

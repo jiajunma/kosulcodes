@@ -238,6 +238,7 @@ def tilde_inverse(w, beta):
     """
     w_inv = inverse_permutation(w)
     beta_img = {w[i - 1] for i in beta}
+    assert is_beta_on_subset(w_inv, beta_img), f"Beta {beta_img} does not satisfy the beta condition on w_inv={w_inv}"
     return w_inv, beta_img
 
 
