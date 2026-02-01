@@ -181,6 +181,33 @@ class LeftCellModule(HeckeModule):
             # Case sw < w: T_s · T_w = v^2 T_{sw} + (v^2-1)T_w
             return {sx: v**2, w: v**2 - 1}
 
+    def get_standard_canonical_basis(self):
+        """
+        Get the standard canonical basis from HeckeA implementation.
+
+        This is used for verification purposes, not as an implementation
+        of the canonical basis algorithm in this module.
+
+        Returns:
+            Dictionary mapping permutations to their canonical basis elements
+        """
+        # Import HeckeA here to avoid circular imports
+        sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from HeckeA import HeckeA
+
+        # Create a HeckeA instance with the same n
+        hecke_a = HeckeA(self.n)
+
+        # Get the canonical basis
+        standard_basis = hecke_a.canonical_basis()
+
+        # Convert to our format
+        result = {}
+        for w, element in standard_basis.items():
+            result[w] = HeckeElement(self, element.coeffs)
+
+        return result
+
 
 # Test function to demonstrate usage
 def test_left_cell_module(n=3):

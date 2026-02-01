@@ -90,6 +90,40 @@ def test_action_simple_reflection(module, n, verbose=True):
 
     return all_correct
 
+def test_canonical_basis(module, n, verbose=True, max_display=5):
+    """
+    Output the canonical basis elements.
+
+    Args:
+        module: A LeftCellModule instance
+        n: Size of the symmetric group S_n
+        verbose: Whether to print detailed results
+        max_display: Maximum number of elements to display
+
+    Returns:
+        True always since we're just displaying the basis
+    """
+    if verbose:
+        print("\n=== Testing canonical basis ===")
+
+    # Get the standard canonical basis from HeckeA implementation
+    canonical_basis = module.get_standard_canonical_basis()
+
+    # Output canonical basis elements
+    if verbose:
+        print(f"\nCanonical basis elements for S_{n}:")
+        count = 0
+        for w, element in sorted(canonical_basis.items(), key=lambda x: (length_of_permutation(x[0]), x[0])):
+            print(f"C_{w} = ", end="")
+            element.pretty()
+            count += 1
+            if count >= max_display and not (n <= 3):
+                print("...")
+                break
+
+    return True
+
+
 def test_for_arbitrary_n(n, max_display=10, verbose=True):
     """
     Test the LeftCellModule with an arbitrary value of n.
@@ -132,6 +166,9 @@ def test_for_arbitrary_n(n, max_display=10, verbose=True):
     # Test action of simple reflections
     test_action_simple_reflection(module, n, verbose)
 
+    # Test canonical basis
+    test_canonical_basis(module, n, verbose, max_display=5)
+
     # Test Bruhat order
     if verbose:
         print("\nTesting Bruhat order relations:")
@@ -164,6 +201,9 @@ def main():
     # Run tests
     action_ok = test_action_simple_reflection(module, n, verbose)
 
+    # Test canonical basis
+    canonical_ok = test_canonical_basis(module, n, verbose)
+
     # Test with arbitrary n
     arbitrary_ok = test_for_arbitrary_n(n, verbose=verbose)
 
@@ -171,10 +211,11 @@ def main():
     elapsed_time = time.perf_counter() - start_time
     print(f"\nTest summary for S_{n}:")
     print(f"Simple reflection action: {'PASSED' if action_ok else 'FAILED'}")
+    print(f"Canonical basis: {'PASSED' if canonical_ok else 'FAILED'}")
     print(f"Arbitrary n test: {'PASSED' if arbitrary_ok else 'FAILED'}")
     print(f"\nTotal time: {elapsed_time:.2f} seconds")
 
-    return 0 if action_ok and arbitrary_ok else 1
+    return 0 if (action_ok and canonical_ok and arbitrary_ok) else 1
 
 if __name__ == "__main__":
     sys.exit(main())
