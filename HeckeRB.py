@@ -1,7 +1,7 @@
 import sympy as sp
 from sympy import collect
 from HeckeA import v, q, HeckeA
-from RB import beta_to_sigma, generate_all_sigma, right_action_rb, root_type_right, tilde_inverse_sigma, str_colored_partition, normalize_key, denormalize_key 
+from RB import beta_to_sigma, generate_all_sigma, is_decreasing_on_subset, right_action_rb, root_type_right, tilde_inverse_sigma, str_colored_partition, normalize_key, denormalize_key 
 
 from perm import (
     generate_permutations,
@@ -48,13 +48,13 @@ class HeckeRB:
 
     def right_action_basis_simple(self, wtilde, i):
         """
+        We assume wtilde is normalized
         Compute T_(w,beta) * T_{s_i}.
 
         Returns:
             dict mapping (w,beta) keys to coefficients in q.
         """
         s = simple_reflection(i, self.n)
-        wtilde = normalize_key(*wtilde)
         key = (wtilde, s)
         if key in self._right_action_cache:
             return dict(self._right_action_cache[key])
@@ -428,12 +428,11 @@ class HeckeRB:
                 for key in elements_by_length.get(ell, []):
                     assert key in bar_table, f"bar_table missing key {key}"
                     
-                    w, beta = denormalize_key(key)
                     
                     # Try each simple reflection on right action
                     for s_idx in range(1, self.n):
                         # Compute T_{w̃} · T_s
-                        action = self.right_action_basis_simple((w, beta), s_idx)
+                        action = self.right_action_basis_simple(key, s_idx)
                         
                         # Find terms with ℓ(w̃'') > ℓ(w̃)
                         higher_terms = []

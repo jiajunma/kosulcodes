@@ -8,6 +8,10 @@ from perm import *
 def normalize_key(w, sigma):
     return (tuple(w), frozenset(sigma))
 
+def normalize_key_sigma(w, sigma):
+    assert is_decreasing_on_subset(w, sigma), f"Sigma={sigma} does not satisfy the decreasing condition on {w}"
+    return (tuple(w), frozenset(sigma))
+
 
 def denormalize_key(key):
     w, beta = key
@@ -479,37 +483,45 @@ def root_type_right(w, sigma):
     for i in range(1, n):
         s_i = transposition(i, i + 1, n)
         w_s_i = permutation_prod(w, s_i)
-        l_wsi = length_of_permutation(w_s_i)
         inter = sigma_set & {i, i + 1}
         sigma_swapped = {s_i[j - 1] for j in sigma_set}
 
-        if l_wsi > l_w:
+        C = [normalize_key_sigma(w,sigma)]
+        T = ""
+        # If l(w s_i) > l(w) <===> w(i)<w(i+1).  
+        if w[i-1] < w[i]:
             if inter == {i} or not inter:
-                result[i] = ( "U-", [normalize_key(w_s_i, sigma_swapped)])
+                T = "U-"
+                C.append(normalize_key_sigma(w_s_i, sigma_swapped))
             elif inter == {i + 1}:
-                result[i] = ( "T-", [normalize_key(w_s_i, sigma_swapped), normalize_key(w_s_i, sigma_swapped | {i + 1})])
+                T = "T-"
+                C.append(normalize_key_sigma(w_s_i, sigma_swapped))
+                C.append(normalize_key_sigma(w_s_i, sigma_swapped | {i + 1}))
             else:
                 raise ValueError(
                     f"Unhandled case for i={i}, inter={inter}, l(w s_i)>l(w), in fact this case should not happen"
                 )
-        elif l_wsi < l_w:
+        else:
             if inter == {i + 1} or not inter:
-                result[i] = ( "U+", [normalize_key(w_s_i, sigma_swapped)])
+                T = "U+"
+                C.append(normalize_key_sigma(w_s_i, sigma_swapped))
             elif inter == {i}:
-                result[i] = ( "T-", [normalize_key(w_s_i, sigma_swapped), normalize_key(w, sigma_swapped | {i})])
+                T = "T-"
+                C.append(normalize_key_sigma(w_s_i, sigma_swapped))
+                C.append(normalize_key_sigma(w, sigma_swapped | {i}))
             elif inter == {i, i + 1}:
                 sigma_without_ip1 = set(sigma_set)
                 sigma_without_ip1.discard(i + 1)
                 sigma_without_i = set(sigma_set)
                 sigma_without_i.discard(i)
-                result[i] = ("T+",
-                    [normalize_key(w, sigma_without_ip1), normalize_key(w_s_i, sigma_without_i)])
+                T = "T+"
+                C.append(normalize_key_sigma(w, sigma_without_ip1))
+                C.append(normalize_key_sigma(w_s_i, sigma_without_i))
             else:
                 raise ValueError(
                     f"Unhandled case for i={i}, inter={inter}, l(w s_i)<l(w), in fact this case should not happen"
                 )
-        else:
-            raise ValueError(f"Unexpected length equality for i={i}")
+        result[i] = (T, C)
 
     return result
 
