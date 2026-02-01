@@ -65,11 +65,28 @@ $$bar(T_x) = \sum_{y \in B} R_{y,x} T_y$$
 ## 6. Kazhdan-Lusztig (Canonical) Basis
 The canonical basis elements $C_x$ are uniquely determined by:
 - $bar(C_x) = C_x$ (Self-duality)
-- $C_x = \sum_{y \le x} P_{y,x}(v) T_y$ where $P_{x,x} = 1$ and $P_{y,x} \in v\mathbb{Z}[v]$ for $y < x$.
+- $C_x = \sum_{y \le x} P_{y,x}(v) T_y$ where $P_{x,x} = 1$ and $P_{y,x} \in v^{-1}\mathbb{Z}[v^{-1}]$ for $y < x$.
 
-The implementation will include an inductive algorithm to compute $P_{y,x}$ using the R-polynomials.
+### Inductive Computation of KL Polynomials
+Based on Lusztig's book Lemma 24.2.1, the polynomials $P_{y,x}$ are computed by induction on the length difference $\ell(x) - \ell(y)$. 
 
+In the implementation, you should compute KL polynomials (dict of dict with value in Laurent polynomial) in one shot and save $P_{y,x}$ as KL[x][y].
+ First set $KL[x][x] = 1$.  
 
+In our convention, the transition matrix $R$ acts from the left ($P = R \cdot bar(P)$), which is opposite to the row-wise action in the lemma ($p = bar(p) \cdot r$).
+
+For a fixed $x$, we compute $P_{y,x}$ for all $\ell(y) -  \ell(x) = k+1$ as follows:
+
+1. **Base Case**: $P_{x,x} = 1$.
+2. **Inductive Step**: Suppose $P_{z,x}$ is known for all $z$ with $\ell(z) - \ell(y) <=k$.
+   - Compute the auxiliary polynomial $q_{y,x}$:
+     $$q_{y,x} = \sum_{y < z \le x} R_{y,z} \cdot bar(P_{z,x})$$
+   - $P_{y,x}$ is the unique element in $v^{-1}\mathbb{Z}[v^{-1}]$ satisfying the equation $P_{y,x} - bar(P_{y,x}) = q_{y,x}$.
+   - Practically, $P_{y,x}$ is obtained by collecting all terms of $q_{y,x}$ with negative powers of $v$:
+     $$P_{y,x} = \sum_{i < 0} \text{coeff}(q_{y,x}, v^i) v^i$$
+
+### Testing
+    after computed the KL polynomail test everthing works for the LeftCell case. 
 
 
 
