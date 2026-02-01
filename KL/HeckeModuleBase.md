@@ -5,6 +5,8 @@ This document outlines the design and implementation of the `HeckeModule` base c
 ## 1. Overview
 The `HeckeModule` class provides a unified interface for basis management, Hecke algebra actions, and the computation of canonical (Kazhdan-Lusztig) bases.
 
+We always use $v$ as the indeterminate and $q = v^2$. 
+
 ## 2. Core Attributes
 The base class maintains:
 - **Basis B**: An interface or list of the standard basis elements.
@@ -83,6 +85,7 @@ For a fixed $x$, we compute $P_{y,x}$ for all $y$ with $\ell(x) - \ell(y) = k+1$
 
 ### Testing
 After computing the KL polynomials, verify that everything works correctly for the `LeftCell` case.
+In the testing also print the canonical basis
 
 
 

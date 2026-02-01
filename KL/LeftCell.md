@@ -48,13 +48,13 @@ This matches the standard Hecke algebra multiplication rules where $q = v^2$.
 
 ### Step 3: Integrate with HeckeModule Base
 - The `LeftCellModule` class should inherit from `HeckeModule`.
+- **!!Important!!** You are not allowed to implement the general algorithm for computing the bar involution (R polynomial) and KL polynomial
+- Your task is to provide basic functions to define the HeckeModule (basis B, basic basis BB, bar on BB, lenght, action by simple reflection etc. )
 - Implement abstract methods:
   - `ell(x)`: Return the inversion number of the permutation $x$.
   - `is_bruhat_leq(y, x)`: Return True if $y \le x$ in the Bruhat order.
-  - `get_type_and_companions(s, x)`: Return the type (`U-` or `U+`) and companions $\{sw, w\}$ as defined above.
-  - `get_basic_elements_bar()`: Return $\{id: T_{id}\}$.
 
 ### Step 4: Verification
-- Verify the bar involution on $S_n$ matches the theoretical expectation: $bar(T_w) = (T_{w^{-1}})^{-1}$.
+- Verify the bar involution on $S_n$ matches the theoretical expectation: $bar(T_w) = (T_{w^{-1}})^{-1} $.
 - Verify that the canonical basis elements computed match the standard Kazhdan-Lusztig polynomials for $S_n$.
 - In the test, your program should allow n be arbitrary integer. 
