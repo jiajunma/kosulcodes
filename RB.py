@@ -251,6 +251,19 @@ def tilde_inverse(w, beta):
     return w_inv, beta_img
 
 
+def tilde_inverse_sigma(w, sigma):
+    """
+    first convert to beta notation
+    Return (w^{-1}, w(beta)) for w~ = (w, beta).
+    """
+    beta = sigma_to_beta(w, sigma)
+    w_inv = inverse_permutation(w)
+    beta_img = {w[i - 1] for i in beta}
+    assert is_beta_on_subset(w_inv, beta_img), f"Beta {beta_img} does not satisfy the beta condition on w_inv={w_inv}"
+    sigma_img = beta_to_sigma(w_inv, beta_img)
+    return w_inv, sigma_img
+
+
 def fourier_transform(w, beta):
     """
     Compute the Fourier transform of (w, beta): 
@@ -453,12 +466,15 @@ def root_type_right(w, sigma):
         sigma: A set of positions (1-indexed)
 
     Returns:
-        a list -> (i -> (type, list of companion (w, sigma_set)))
+        a list ->  (length of w)+ (i -> (type, list of companion (w, sigma_set)))
     """
     n = len(w)
     sigma_set = set(sigma)
+    beta = sigma_to_beta(w, sigma)
     l_w = length_of_permutation(w)
     result = [None]* (n+1) 
+    # Store the length of (w, beta) at the beginning of the list
+    result[0] = l_w + len(beta)
 
     for i in range(1, n):
         s_i = transposition(i, i + 1, n)

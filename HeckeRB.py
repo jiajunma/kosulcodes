@@ -1,7 +1,7 @@
 import sympy as sp
 from sympy import collect
 from HeckeA import v, q, HeckeA
-from RB import beta_to_sigma, generate_all_gamma, right_action_rb, root_type_right, tilde_inverse, str_colored_partition, normalize_key, denormalize_key 
+from RB import beta_to_sigma, generate_all_sigma, right_action_rb, root_type_right, tilde_inverse_sigma, str_colored_partition, normalize_key, denormalize_key 
 
 from perm import (
     generate_permutations,
@@ -30,7 +30,7 @@ class HeckeRB:
         self._right_action_cache = {}
         for w in generate_permutations(n):
             for sigma in generate_all_sigma(w):
-                self._basis[normalize_key(w, sigma)] = root_type2(w,sigma) 
+                self._basis[normalize_key(w, sigma)] = root_type_right(w, sigma) 
 
     def basis(self):
         for key in self._basis:
@@ -54,63 +54,27 @@ class HeckeRB:
             dict mapping (w,beta) keys to coefficients in q.
         """
         s = simple_reflection(i, self.n)
-        key = (normalize_key(*wtilde), s)
+        wtilde = normalize_key(*wtilde)
+        key = (wtilde, s)
         if key in self._right_action_cache:
             return dict(self._right_action_cache[key])
-        w, beta = wtilde
-        beta = set(beta)
-        wtilde_s = right_action_rb(wtilde, s)
-        ws, ws_beta = wtilde_s
+        # T for type and C for companion
+        T, C = self._basis[wtilde][i]
+        result = {wtilde: - sp.Integer(1)}
 
-        l_w = length_of_permutation(w)
-        l_ws = length_of_permutation(ws)
-
-        sigma = beta_to_sigma(w, beta)
-        sigma_prime = beta_to_sigma(ws, ws_beta)
-
-        def wprime(wtilde):
-            w, beta = wtilde
-            return (w, set(beta).symmetric_difference({i + 1}))
-
-        iota = {i, i + 1}
-        result = {}
-        
-        if l_ws > l_w:
-            if (i + 1) not in sigma_prime:
-                result[normalize_key(*wtilde_s)] = sp.Integer(1)
-            else:
-                wtilde_s_prime = wprime(wtilde_s)
-                result[normalize_key(*wtilde_s)] = sp.Integer(1) 
-                result[normalize_key(*wtilde_s_prime)] = sp.Integer(1) 
-        else:  # l_ws < l_w
-            wtilde_prime = wprime(wtilde)
-            if i in beta and (i+1) not in beta:
-                wtilde_prime_s = right_action_rb(wtilde_prime, s)
-                result[normalize_key(*wtilde_prime)] = sp.Integer(1)
-                result[normalize_key(*wtilde_prime_s)] = sp.Integer(1)
-            elif i in sigma and (i+1) in sigma:
-                result[normalize_key(*wtilde)] = q - 2  
-                result[normalize_key(*wtilde_prime)] = q - 1 
-                result[normalize_key(*wtilde_s)] = q - 1
-            else:
-                result[normalize_key(*wtilde)] = q - 1
-                result[normalize_key(*wtilde_s)] = q 
-        self._right_action_cache[key] = result 
-        return result
-
-
-    def right_action_basis_simple(self, wtilde, i):
-        """
-        Compute T_(w,beta) * T_{s_i}.
-
-        Returns:
-            dict mapping (w,beta) keys to coefficients in q.
-        """
-        s = simple_reflection(i, self.n)
-        key = (normalize_key(*wtilde), s)
-        if key in self._right_action_cache:
-            return dict(self._right_action_cache[key])
-         
+        if T == "G":
+            result[wtilde] = result.get(wtilde, 0) + (q + 1)
+        elif T == "U+":
+            for c in C:
+                result[c] = result.get(c, 0) + q
+        elif T == "T+":
+            for c in C:
+                result[c] = result.get(c, 0) + (q - 1)
+        elif T == "U-" or T == "T-":
+            for c in C:
+                result[c] = result.get(c, 0) + sp.Integer(1)
+        result = {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
+        self._right_action_cache[key] = result
         return result
 
 
@@ -215,11 +179,14 @@ class HeckeRB:
         return result
 
 
-    def ell_wtilde(self, w, beta):
+    def ell_wtilde(self, wtilde):
         """
         Length of w~ = (w, beta), using ell(w) + |beta|.
         """
-        return length_of_permutation(w) + len(beta)
+        # this is already calculated in basis
+        return self._basis[wtilde][0]
+
+
 
     def T_wtilde(self, w, beta):
         """
@@ -295,7 +262,7 @@ class HeckeRB:
         result = {}
         for key, coeff in element.items():
             w, beta = denormalize_key(key)
-            w_inv, beta_img = tilde_inverse(w, beta)
+            w_inv, beta_img = tilde_inverse_sigma(w, beta)
             new_key = normalize_key(w_inv, beta_img)
             result[new_key] =  coeff
         return result
@@ -370,13 +337,17 @@ class HeckeRB:
     # Special elements w_i = (id, {1,...,i})
     # =========================================================================
     def special_element_key(self, i):
-        """
+        f"""
         Return the key for special element w_i = (id, {1,...,i}).
+        This is the same as (id, {i}) in (w,sigma) notation.
         These are fundamental for the bar involution.
         """
         identity = tuple(range(1, self.n + 1))
-        beta_i = set(range(1, i + 1))
-        return normalize_key(identity, beta_i)
+        if i == 0: 
+            sigma_i = frozenset() 
+        else:
+            sigma_i = frozenset({i})
+        return normalize_key(identity, sigma_i)
 
     # =========================================================================
     # Bar involution
@@ -408,8 +379,7 @@ class HeckeRB:
         elements_by_length = {}
         max_length = 0
         for key in self._basis:
-            w, beta = denormalize_key(key)
-            ell = self.ell_wtilde(w, beta)
+            ell = self.ell_wtilde(key)
             if ell not in elements_by_length:
                 elements_by_length[ell] = []
             elements_by_length[ell].append(key)
@@ -469,7 +439,7 @@ class HeckeRB:
                         higher_terms = []
                         
                         for k, c in action.items():
-                            ell_k = self.ell_wtilde(*denormalize_key(k))
+                            ell_k = self.ell_wtilde(k)
                             if ell_k > ell:
                                 higher_terms.append((k, c))
                         
@@ -533,8 +503,7 @@ class HeckeRB:
                         key_higher = []
                         coeff_higher = [] 
                         for k, c in action.items():
-                            w_k, beta_k = denormalize_key(k)
-                            if self.ell_wtilde(w_k, beta_k) > ell:
+                            if self.ell_wtilde(k) > ell:
                                 key_higher.append(k)
                                 coeff_higher.append(c)
 
@@ -791,10 +760,8 @@ class HeckeRB:
             self._kl_poly_cache[key] = sp.Integer(0)
             return sp.Integer(0)
         
-        wy, betay = denormalize_key(y_key)
-        ww, betaw = denormalize_key(w_key)
-        ell_y = self.ell_wtilde(wy, betay)
-        ell_w = self.ell_wtilde(ww, betaw)
+        ell_y = self.ell_wtilde(y_key)
+        ell_w = self.ell_wtilde(w_key)
         
         # For cover relations (length difference 1), P = 0
         # (The canonical basis differs from H basis only by lower order terms
@@ -820,10 +787,8 @@ class HeckeRB:
         For adjacent elements (covers in Bruhat order), P = 0.
         The KL polynomial is only non-zero when there are specific geometric conditions.
         """
-        wy, betay = denormalize_key(y_key)
-        ww, betaw = denormalize_key(w_key)
-        ell_y = self.ell_wtilde(wy, betay)
-        ell_w = self.ell_wtilde(ww, betaw)
+        ell_y = self.ell_wtilde(y_key)
+        ell_w = self.ell_wtilde(w_key)
         
         # For adjacent pairs (length difference 1), P = 0 in v^{-1}Z[v^{-1}]
         # Actually, looking at standard KL theory more carefully:
@@ -873,10 +838,8 @@ class HeckeRB:
         if not self.is_bruhat_leq(y_key, w_key):
             return sp.Integer(0)
         
-        wy, betay = denormalize_key(y_key)
-        ww, betaw = denormalize_key(w_key)
-        ell_y = self.ell_wtilde(wy, betay)
-        ell_w = self.ell_wtilde(ww, betaw)
+        ell_y = self.ell_wtilde(y_key)
+        ell_w = self.ell_wtilde(w_key)
         
         diff = ell_w - ell_y
         
@@ -947,8 +910,7 @@ class HeckeRB:
         # Sort elements by length (dimension)
         elements_by_length = {}
         for key in self._basis:
-            w, beta = denormalize_key(key)
-            ell = self.ell_wtilde(w, beta)
+            ell = self.ell_wtilde(key)
             if ell not in elements_by_length:
                 elements_by_length[ell] = []
             elements_by_length[ell].append(key)
@@ -974,7 +936,7 @@ class HeckeRB:
             return "0"
 
         terms = []
-        for key in sorted(element.keys(), key=lambda k: (self.ell_wtilde(*denormalize_key(k)), k)):
+        for key in sorted(element.keys(), key=lambda k: (self.ell_wtilde(k), k)):
             w, beta = denormalize_key(key)
             coeff = sp.expand(element[key])
             if coeff == 0:
@@ -1036,8 +998,7 @@ class HeckeRB:
         # Sort elements by length
         elements_by_length = {}
         for key in self._basis:
-            w, beta = denormalize_key(key)
-            ell = self.ell_wtilde(w, beta)
+            ell = self.ell_wtilde(key)
             if ell not in elements_by_length:
                 elements_by_length[ell] = []
             elements_by_length[ell].append(key)
@@ -1116,8 +1077,7 @@ class HeckeRB:
         # Count by length
         length_counts = {}
         for key in self._basis:
-            w, beta = denormalize_key(key)
-            ell = self.ell_wtilde(w, beta)
+            ell = self.ell_wtilde(key)
             length_counts[ell] = length_counts.get(ell, 0) + 1
         
         print("Elements by length:")
@@ -1293,14 +1253,13 @@ class HeckeRB:
 
         # Sort by length for display
         sorted_keys = sorted(basis.keys(),
-                            key=lambda k: (self.ell_wtilde(*denormalize_key(k)), k))
+                            key=lambda k: (self.ell_wtilde(k), k))
 
         if max_elements is None:
             max_elements = len(sorted_keys)
 
         for key in sorted_keys[:max_elements]:
-            w, beta = denormalize_key(key)
-            ell = self.ell_wtilde(w, beta)
+            ell = self.ell_wtilde(key)
             element_str = self.format_element(basis[key])
             wtilde_str = self._format_wtilde(w, beta)
             print(f"  H̃[{wtilde_str}] (ℓ={ell}) = {element_str}")
@@ -1316,11 +1275,10 @@ class HeckeRB:
         count = 0
         # Sort basis by length
         sorted_keys = sorted(self._basis, 
-                            key=lambda k: (self.ell_wtilde(*denormalize_key(k)), k))
+                            key=lambda k: (self.ell_wtilde(k), k))
         
         for w_key in sorted_keys:
-            w, beta_w = denormalize_key(w_key)
-            ell_w = self.ell_wtilde(w, beta_w)
+            ell_w = self.ell_wtilde(w_key)
             
             lower = self.bruhat_lower_elements(w_key)
             for y_key in lower:
@@ -1349,7 +1307,7 @@ class HeckeRB:
         
         count = 0
         sorted_keys = sorted(self._basis, 
-                            key=lambda k: (self.ell_wtilde(*denormalize_key(k)), k))
+                            key=lambda k: (self.ell_wtilde(k), k))
         
         for w_key in sorted_keys:
             w, beta_w = denormalize_key(w_key)
