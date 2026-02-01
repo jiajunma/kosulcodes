@@ -4,6 +4,15 @@ import csv
 from perm import *
 
 
+
+def normalize_key(w, sigma):
+    return (tuple(w), frozenset(sigma))
+
+
+def denormalize_key(key):
+    w, beta = key
+    return tuple(w), frozenset(beta)
+
 def generate_permutations(n):
     """
     Generate all permutations of numbers from 1 to n
@@ -432,6 +441,61 @@ def root_type2(w, sigma):
 
     return result
 
+def root_type_right(w, sigma):
+    """
+    Determine the root type for each simple reflection s_i for the right action .
+
+    For each i in {1, ..., n-1}, classify (s'_i, O_sigma) into U-/U+/T-/T+
+    and compute the corresponding s'_i-companion(s).
+
+    Args:
+        w: A permutation (tuple or list)
+        sigma: A set of positions (1-indexed)
+
+    Returns:
+        a list -> (i -> (type, list of companion (w, sigma_set)))
+    """
+    n = len(w)
+    sigma_set = set(sigma)
+    l_w = length_of_permutation(w)
+    result = [None]* (n+1) 
+
+    for i in range(1, n):
+        s_i = transposition(i, i + 1, n)
+        w_s_i = permutation_prod(w, s_i)
+        l_wsi = length_of_permutation(w_s_i)
+        inter = sigma_set & {i, i + 1}
+        sigma_swapped = {s_i[j - 1] for j in sigma_set}
+
+        if l_wsi > l_w:
+            if inter == {i} or not inter:
+                result[i] = ( "U-", [normalize_key(w_s_i, sigma_swapped)])
+            elif inter == {i + 1}:
+                result[i] = ( "T-", [normalize_key(w_s_i, sigma_swapped), normalize_key(w_s_i, sigma_swapped | {i + 1})])
+            else:
+                raise ValueError(
+                    f"Unhandled case for i={i}, inter={inter}, l(w s_i)>l(w), in fact this case should not happen"
+                )
+        elif l_wsi < l_w:
+            if inter == {i + 1} or not inter:
+                result[i] = ( "U+", [normalize_key(w_s_i, sigma_swapped)])
+            elif inter == {i}:
+                result[i] = ( "T-", [normalize_key(w_s_i, sigma_swapped), normalize_key(w, sigma_swapped | {i})])
+            elif inter == {i, i + 1}:
+                sigma_without_ip1 = set(sigma_set)
+                sigma_without_ip1.discard(i + 1)
+                sigma_without_i = set(sigma_set)
+                sigma_without_i.discard(i)
+                result[i] = ("T+",
+                    [normalize_key(w, sigma_without_ip1), normalize_key(w_s_i, sigma_without_i)])
+            else:
+                raise ValueError(
+                    f"Unhandled case for i={i}, inter={inter}, l(w s_i)<l(w), in fact this case should not happen"
+                )
+        else:
+            raise ValueError(f"Unexpected length equality for i={i}")
+
+    return result
 
 def dim_Omega_w_beta(w, beta):
     """

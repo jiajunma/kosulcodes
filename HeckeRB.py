@@ -1,8 +1,8 @@
 import sympy as sp
 from sympy import collect
-
 from HeckeA import v, q, HeckeA
-from RB import beta_to_sigma, generate_all_beta, right_action_rb, tilde_inverse, str_colored_partition
+from RB import beta_to_sigma, generate_all_gamma, right_action_rb, root_type_right, tilde_inverse, str_colored_partition, normalize_key, denormalize_key 
+
 from perm import (
     generate_permutations,
     inverse_permutation,
@@ -21,23 +21,16 @@ from RB_Bruhat import (
 )
 
 
-def normalize_key(w, beta):
-    return (tuple(w), tuple(sorted(beta)))
-
-
-def denormalize_key(key):
-    w, beta = key
-    return tuple(w), set(beta)
 
 
 class HeckeRB:
     def __init__(self, n):
         self.n = n
-        self._basis = []
+        self._basis = dict() 
         self._right_action_cache = {}
         for w in generate_permutations(n):
-            for beta in generate_all_beta(w):
-                self._basis.append(normalize_key(w, beta))
+            for sigma in generate_all_sigma(w):
+                self._basis[normalize_key(w, sigma)] = root_type2(w,sigma) 
 
     def basis(self):
         for key in self._basis:
@@ -104,6 +97,22 @@ class HeckeRB:
                 result[normalize_key(*wtilde_s)] = q 
         self._right_action_cache[key] = result 
         return result
+
+
+    def right_action_basis_simple(self, wtilde, i):
+        """
+        Compute T_(w,beta) * T_{s_i}.
+
+        Returns:
+            dict mapping (w,beta) keys to coefficients in q.
+        """
+        s = simple_reflection(i, self.n)
+        key = (normalize_key(*wtilde), s)
+        if key in self._right_action_cache:
+            return dict(self._right_action_cache[key])
+         
+        return result
+
 
 
     def right_action_simple(self, element, i):
