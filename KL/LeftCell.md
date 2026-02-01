@@ -29,7 +29,7 @@ $T_s \cdot T_x = -T_x + \text{coeff} \sum_{y \in C} T_y$.
 This matches the standard Hecke algebra multiplication rules where $q = v^2$.
 
 ### Essential Functions
-- **Length Function**: $\ell(w)$ is the number of inversions in the permutation.
+- **Length Function**: $\ell(w)$ is the inversion number of the permutation.
 - **Bruhat Order**: Standard Bruhat order on $S_n$.
 - **Basic Elements $BB$**: $\{id\}$.
 - **Bar on Basic Elements**: $bar(T_{id}) = T_{id}$.
@@ -48,11 +48,11 @@ This matches the standard Hecke algebra multiplication rules where $q = v^2$.
 
 ### Step 3: Integrate with HeckeModule Base
 - The `LeftCellModule` class should inherit from `HeckeModule`.
-- Implement abstract methods for:
-  - `ell(x)`
-  - `is_bruhat_leq(y, x)`
-  - `get_type_and_companions(s, x)`
-  - `get_basic_elements_bar()`
+- Implement abstract methods:
+  - `ell(x)`: Return the inversion number of the permutation $x$.
+  - `is_bruhat_leq(y, x)`: Return True if $y \le x$ in the Bruhat order.
+  - `get_type_and_companions(s, x)`: Return the type (`U-` or `U+`) and companions $\{sw, w\}$ as defined above.
+  - `get_basic_elements_bar()`: Return $\{id: T_{id}\}$.
 
 ### Step 4: Verification
 - Verify the bar involution on $S_n$ matches the theoretical expectation: $bar(T_w) = (T_{w^{-1}})^{-1}$.
