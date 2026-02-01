@@ -29,7 +29,8 @@ For each pair $(s, x)$ where $s \in S$ and $x \in B$, the action is determined b
   $T_s \cdot T_x = - T_x + \sum_{y \in C} T_y$
 
 ### Caching
-- The program should maintain a cache for the action of simple reflections on the standard basis.
+- The program should maintain a cache for the action of simple reflections on the standard basis. 
+ The function called "compute_types"
 - Optional: Cache $T_w \cdot T_x$ results to accelerate repeated computations.
 
 
