@@ -496,6 +496,7 @@ def root_type_right(w, sigma):
             elif inter == {i + 1}:
                 T = "T-"
                 C.append(normalize_key_sigma(w_s_i, sigma_swapped))
+                print(f"w : {w}, sigma : {sigma}, i :{i}")
                 C.append(normalize_key_sigma(w_s_i, sigma_swapped | {i + 1}))
             else:
                 raise ValueError(
