@@ -67,6 +67,8 @@ The canonical basis elements $C_x$ are uniquely determined by:
 - $bar(C_x) = C_x$ (Self-duality)
 - $C_x = \sum_{y \le x} P_{y,x}(v) T_y$ where $P_{x,x} = 1$ and $P_{y,x} \in v^{-1}\mathbb{Z}[v^{-1}]$ for $y < x$.
 
+
+
 ### Inductive Computation of KL Polynomials
 Based on Lusztig's book Lemma 24.2.1, the polynomials $P_{y,x}$ are computed by induction on the length difference $\ell(x) - \ell(y)$. 
 
@@ -85,7 +87,8 @@ For a fixed $x$, we compute $P_{y,x}$ for all $y$ with $\ell(x) - \ell(y) = k+1$
 
 ### Testing
 After computing the KL polynomials, verify that everything works correctly for the `LeftCell` case.
-In the testing also print the canonical basis
+In the testing also print the canonical basis.
+-- **!!important!!** You should check that $C_s$ is the form 
 
 
 
