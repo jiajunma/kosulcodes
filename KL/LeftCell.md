@@ -57,3 +57,4 @@ This matches the standard Hecke algebra multiplication rules where $q = v^2$.
 ### Step 4: Verification
 - Verify the bar involution on $S_n$ matches the theoretical expectation: $bar(T_w) = (T_{w^{-1}})^{-1}$.
 - Verify that the canonical basis elements computed match the standard Kazhdan-Lusztig polynomials for $S_n$.
+- In the test, your program should allow n be arbitrary integer. 
