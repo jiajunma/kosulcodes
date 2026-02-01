@@ -18,10 +18,9 @@ from perm import (
 # Define symbolic variable v
 v = sp.symbols("v")
 
-def test_bar_involution(module, n, verbose=True):
+def test_action_simple_reflection(module, n, verbose=True):
     """
-    Test if the bar involution in the module matches the theoretical expectation:
-    bar(T_w) = (T_{w^{-1}})^{-1}
+    Test the action of simple reflections on basis elements.
 
     Args:
         module: A LeftCellModule instance
@@ -32,174 +31,62 @@ def test_bar_involution(module, n, verbose=True):
         True if all tests pass, False otherwise
     """
     if verbose:
-        print("\n=== Testing bar involution ===")
+        print("\n=== Testing action by simple reflections ===")
 
     all_correct = True
+    id_perm = tuple(range(1, n + 1))
 
-    # Test for each permutation
-    for length, perms in sorted(module._basis_by_length.items()):
-        for w in sorted(perms, key=tuple):
-            # Compute bar(T_w)
-            bar_T_w = module.bar_basis_element(w)
+    # Test each simple reflection on identity
+    for i in range(1, n):
+        s_i = simple_reflection(i, n)
 
-            if verbose:
-                print(f"\nbar(T_{w}) =", end=" ")
-                module.pretty_print_element(bar_T_w)
+        # Expected action based on rules:
+        # T_s · T_w = T_{sw} if sw > w
+        # T_s · T_w = v^2 T_{sw} + (v^2-1)T_w if sw < w
 
-    if verbose:
-        print(f"\nBar involution tests {'PASSED' if all_correct else 'FAILED'}")
+        # For identity, we know s_i > id, so T_s · T_id = T_{s_i}
+        expected = {s_i: 1}
+        result = module.action_by_simple_reflection(s_i, id_perm)
 
-    return all_correct
+        is_correct = result == expected
+        all_correct &= is_correct
 
-def test_kl_polynomials(module, n, verbose=True):
-    """
-    Test properties of Kazhdan-Lusztig polynomials:
-    1. P_{x,x} = 1
-    2. P_{y,x} = 0 unless y ≤ x in Bruhat order
-    3. Degree constraints: P_{y,x} has degree at most (ℓ(x) - ℓ(y) - 1)/2
+        if verbose:
+            print(f"T_{s_i} · T_{id_perm} = ", end="")
+            module.pretty_print_element(result)
+            if not is_correct:
+                print(f"  Expected: {expected}")
+                print(f"  Got: {result}")
+                print("  FAILED!")
 
-    Args:
-        module: A LeftCellModule instance
-        n: Size of the symmetric group S_n
-        verbose: Whether to print detailed results
+    # Test some other permutation (take first non-identity element)
+    if n >= 3:
+        for s_i in module.simple_reflections():
+            for w in list(generate_permutations(n))[:5]:  # Test a few permutations
+                if w == id_perm:
+                    continue
 
-    Returns:
-        True if all tests pass, False otherwise
-    """
-    if verbose:
-        print("\n=== Testing KL polynomials ===")
-
-    # Compute KL polynomials
-    kl_polys = module.compute_kl_polynomials()
-
-    all_correct = True
-
-    # Test for each pair
-    for pair, poly in kl_polys.items():
-        y, x = pair
-        len_y = length_of_permutation(y)
-        len_x = length_of_permutation(x)
-
-        # Check P_{x,x} = 1
-        if x == y:
-            if poly != 1:
-                all_correct = False
-                if verbose:
-                    print(f"Failed: P_{x,x} = {poly} ≠ 1")
-
-        # Check P_{y,x} = 0 unless y ≤ x
-        elif not module.is_bruhat_leq(y, x):
-            if poly != 0:
-                all_correct = False
-                if verbose:
-                    print(f"Failed: P_{y,x} = {poly} ≠ 0 but y ≰ x")
-
-        # Check degree constraint
-        else:
-            max_degree = (len_x - len_y - 1) // 2
-            if max_degree < 0:
-                max_degree = 0
-
-            # Parse polynomial to find highest power of v
-            poly_expanded = sp.expand(poly)
-            highest_power = 0
-
-            for term in sp.Add.make_args(poly_expanded):
-                powers = term.as_powers_dict()
-                if v in powers:
-                    power = powers[v]
-                    highest_power = max(highest_power, power)
-
-            if highest_power > max_degree:
-                all_correct = False
-                if verbose:
-                    print(f"Failed: P_{y,x} = {poly} has degree {highest_power} > {max_degree}")
-
-    if verbose:
-        print(f"\nKL polynomial tests {'PASSED' if all_correct else 'FAILED'}")
-
-        # Print some example polynomials
-        print("\nSome KL polynomial examples:")
-        examples = []
-        for pair, poly in kl_polys.items():
-            y, x = pair
-            if y != x and poly != 0:
-                examples.append((pair, poly))
-                if len(examples) >= 5:
-                    break
-
-        for (y, x), poly in examples:
-            print(f"P_{y},{x} = {poly}")
-
-    return all_correct
-
-def test_canonical_basis(module, n, verbose=True):
-    """
-    Test properties of the canonical basis:
-    1. bar(C_x) = C_x (bar invariance)
-    2. C_x = T_x + ∑_{y<x} P_{y,x}(v^{-1}) v^{l(x)-l(y)} T_y
-
-    Args:
-        module: A LeftCellModule instance
-        n: Size of the symmetric group S_n
-        verbose: Whether to print detailed results
-
-    Returns:
-        True if all tests pass, False otherwise
-    """
-    if verbose:
-        print("\n=== Testing canonical basis ===")
-
-    # Compute canonical basis
-    canonical_basis = module.compute_canonical_basis()
-
-    all_correct = True
-
-    # Test bar invariance
-    for x, element in canonical_basis.items():
-        # Compute bar(C_x)
-        bar_C_x = element.bar()
-
-        # Check if bar(C_x) = C_x
-        is_invariant = element.module.is_equal(element.coeffs, bar_C_x.coeffs)
-
-        if not is_invariant:
-            all_correct = False
-            if verbose:
-                print(f"Failed: C_{x} is not bar-invariant")
-                print("C_x =")
-                element.pretty()
-                print("bar(C_x) =")
-                bar_C_x.pretty()
-
-                # Show the difference
-                diff = {}
-                for y, coeff in element.coeffs.items():
-                    if y in bar_C_x.coeffs:
-                        diff_coeff = sp.expand(coeff - bar_C_x.coeffs[y])
-                        if diff_coeff != 0:
-                            diff[y] = diff_coeff
-                    else:
-                        diff[y] = coeff
-
-                for y, coeff in bar_C_x.coeffs.items():
-                    if y not in element.coeffs:
-                        diff[y] = -coeff
-
-                if diff:
-                    print("Difference:")
-                    module.pretty_print_element(diff)
+                sw = permutation_prod(s_i, w)
+                if module.ell(sw) > module.ell(w):
+                    # U- type: T_s · T_w = T_{sw}
+                    expected = {sw: 1}
                 else:
-                    print("No difference detected, but is_bar_invariant returned False.")
+                    # U+ type: T_s · T_w = v^2 T_{sw} + (v^2-1)T_w
+                    expected = {sw: v**2, w: v**2 - 1}
+
+                result = module.action_by_simple_reflection(s_i, w)
+                is_correct = result == expected
+                all_correct &= is_correct
+
+                if verbose and not is_correct:
+                    print(f"T_{s_i} · T_{w} = ", end="")
+                    module.pretty_print_element(result)
+                    print(f"  Expected: {expected}")
+                    print(f"  Got: {result}")
+                    print("  FAILED!")
 
     if verbose:
-        print(f"\nCanonical basis tests {'PASSED' if all_correct else 'FAILED'}")
-
-        # Print some example basis elements
-        print("\nSome canonical basis examples:")
-        for x, element in list(canonical_basis.items())[:3]:
-            print(f"C_{x} =", end=" ")
-            element.pretty()
+        print(f"\nSimple reflection action tests {'PASSED' if all_correct else 'FAILED'}")
 
     return all_correct
 
@@ -242,34 +129,16 @@ def test_for_arbitrary_n(n, max_display=10, verbose=True):
             if count >= max_display:
                 break
 
-    # Test action of simple reflections on identity
-    id_perm = tuple(range(1, n+1))
-    if verbose:
-        print("\nAction of simple reflections on identity:")
-        for i, s in enumerate(module.simple_reflections()[:3]):  # Show at most 3
-            result = module.act_simple(s, {id_perm: sp.Integer(1)})
-            print(f"T_{s} · T_{id_perm} =", end=" ")
-            module.pretty_print_element(result)
-            if i >= 2:  # Limit to 3 examples
-                print("...")
-                break
+    # Test action of simple reflections
+    test_action_simple_reflection(module, n, verbose)
 
-    # Test computation of canonical basis (sample)
-    canonical_basis = module.compute_canonical_basis()
-
+    # Test Bruhat order
     if verbose:
-        print("\nSample canonical basis elements:")
-        count = 0
-        for length in range(min(4, max(module._basis_by_length.keys()) + 1)):
-            for x in sorted(module._basis_by_length.get(length, []), key=tuple)[:2]:
-                if x in canonical_basis:
-                    print(f"C_{x} =", end=" ")
-                    canonical_basis[x].pretty()
-                    count += 1
-                    if count >= max_display:
-                        break
-            if count >= max_display:
-                break
+        print("\nTesting Bruhat order relations:")
+        for u in list(generate_permutations(n))[:3]:  # Test a few permutations
+            for v in list(generate_permutations(n))[:3]:
+                is_leq = module.is_bruhat_leq(u, v)
+                print(f"{u} <= {v}: {is_leq}")
 
     return True
 
@@ -293,27 +162,7 @@ def main():
     module = LeftCellModule(n)
 
     # Run tests
-    bar_ok = test_bar_involution(module, n, verbose)
-    kl_ok = test_kl_polynomials(module, n, verbose)
-
-    # Test canonical basis structure
-    canonical_ok = True
-    if verbose:
-        print("\n=== Testing canonical basis ===")
-        canonical_basis = module.compute_canonical_basis()
-
-        # Print sample of canonical basis elements
-        print("\nCanonical basis examples:")
-        count = 0
-        for x in sorted(canonical_basis.keys(), key=lambda x: (module.ell(x), x)):
-            print(f"C_{x} =", end=" ")
-            canonical_basis[x].pretty()
-            count += 1
-            if count >= 5 and not full_test:  # Limit display unless full test requested
-                print("... (more elements not shown)")
-                break
-
-        print("\nCanonical basis structure test PASSED")
+    action_ok = test_action_simple_reflection(module, n, verbose)
 
     # Test with arbitrary n
     arbitrary_ok = test_for_arbitrary_n(n, verbose=verbose)
@@ -321,13 +170,11 @@ def main():
     # Print summary
     elapsed_time = time.perf_counter() - start_time
     print(f"\nTest summary for S_{n}:")
-    print(f"Bar involution: {'PASSED' if bar_ok else 'FAILED'}")
-    print(f"KL polynomials: {'PASSED' if kl_ok else 'FAILED'}")
-    print(f"Canonical basis: PASSED")  # Structure test
+    print(f"Simple reflection action: {'PASSED' if action_ok else 'FAILED'}")
     print(f"Arbitrary n test: {'PASSED' if arbitrary_ok else 'FAILED'}")
     print(f"\nTotal time: {elapsed_time:.2f} seconds")
 
-    return 0 if bar_ok and kl_ok and arbitrary_ok else 1
+    return 0 if action_ok and arbitrary_ok else 1
 
 if __name__ == "__main__":
     sys.exit(main())

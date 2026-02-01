@@ -2,6 +2,10 @@
 
 This document defines the `LeftCellModule`, which implements the Hecke algebra $H_n$ as a module over itself via left multiplication.
 
+## 0. File
+**important**  
+  all code here should be in LeftCellModule.py
+
 ## 1. Mathematical Definition
 The module $M$ has a standard basis $\{T_w\}_{w \in S_n}$. The left action of the Hecke algebra generator $T_s$ (for a simple reflection $s$) is given by:
 $$ T_s \cdot T_w = \begin{cases} T_{sw} & \text{if } sw > w \\ q T_{sw} + (q-1) T_w & \text{if } sw < w \end{cases} $$
@@ -47,7 +51,7 @@ This matches the standard Hecke algebra multiplication rules where $q = v^2$.
   3. Returns the corresponding Type and the set $\{sw, w\}$.
 
 ### Step 3: Integrate with HeckeModule Base
-- The `LeftCellModule` class should inherit from `HeckeModule`.
+- **!!Important!!** The `LeftCellModule` class should inherit from `HeckeModule`.
 - **!!Important!!** You are not allowed to implement the general algorithm for computing the bar involution (R polynomial) and KL polynomial
 - Your task is to provide basic functions to define the HeckeModule (basis B, basic basis BB, bar on BB, lenght, action by simple reflection etc. )
 - Implement abstract methods:
