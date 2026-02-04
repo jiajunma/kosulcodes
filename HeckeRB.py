@@ -589,20 +589,23 @@ class HeckeRB:
         return bar_table
 
     def compute_R(self):
-        f"""
+        """
         Compute the R-matrix for the Hecke module.
         This is the coefficient in the expansion:
         bar(H_x) = ∑_y R_{y,x} H_y
 
         self.R[x][y] := R_{y,x}
         """
+        R = {}
         if not hasattr(self, 'bar_table'):
             self.bar_table = self.compute_bar_involution()
         for x in self._basis:
             R[x] = {}
             for y in self.bar_table[x]:
-                R[x][y] = self.bar_table[x][y] * (-v) ** (self.ell_wtilde(x) + self.ell_wtilde(y))
+                R[x][y] = sp.expand(self.bar_table[x][y] * ((-v) ** (self.ell_wtilde(x) + self.ell_wtilde(y))))
         self.R = R
+        for x in self._basis:
+            assert R[x][x] == sp.Integer(1)
         return R
 
 
@@ -777,7 +780,7 @@ class HeckeRB:
             if verbose:
                 print("Computing bar_table first...")
             self.bar_table = self.compute_bar_involution(verbose=False)
-        
+        self.compute_R() 
         # Initialize KL table
         KL = {}
         
@@ -820,12 +823,10 @@ class HeckeRB:
                             if ell_z <= ell_y:
                                 continue
                             
-                            # R'_{y,z} = (-v)^(ell_z + ell_y) * coefficient of T_y in bar(T_z)
-                            R_yz = self.R[z].get(y, sp.Integer(0))
-                            if R_yz == 0 or R_yz == sp.Integer(0):
+                            # R'_{y,z} = coefficient of H_y in bar(H_z)
+                            R_prime_yz = self.R[z].get(y, sp.Integer(0))
+                            if R_prime_yz == 0 or R_prime_yz == sp.Integer(0):
                                 continue
-                            
-                            R_prime_yz = ((-v)**(ell_z + ell_y)) * R_yz
                             
                             # bar(P_{z,x}): v -> v^{-1}
                             bar_P_zx = self.bar_coeff(P_zx)
@@ -881,7 +882,7 @@ class HeckeRB:
         Get the KL polynomial P_{y,x} from the pre-computed table.
         
         The canonical basis element C_x is defined as:
-        C_x = T_x + ∑_{y < x} P_{y,x} T_y
+        C_x = H_x + ∑_{y < x} P_{y,x} H_y
         
         where:
         - P_{y,x} ∈ v^{-1}Z[v^{-1}] for y < x
@@ -1034,7 +1035,6 @@ class HeckeRB:
                 result += f" {t}"
             else:
                 result += f" + {t}"
-
         return result
 
 
@@ -1322,29 +1322,35 @@ class HeckeRB:
         print(f"\nKazhdan-Lusztig polynomials P_{{ỹ,w̃}} (non-trivial only):")
         print("-" * 60)
         
+        if not hasattr(self, '_kl_table'):
+            self.compute_kl_polynomials()
+
         count = 0
         # Sort basis by length
         sorted_keys = sorted(self._basis, 
                             key=lambda k: (self.ell_wtilde(k), k))
         
         for w_key in sorted_keys:
-            ell_w = self.ell_wtilde(w_key)
+            if w_key not in self._kl_table:
+                continue
             
-            lower = self.bruhat_lower_elements(w_key)
-            for y_key in lower:
-                y, beta_y = denormalize_key(y_key)
-                p = self.kl_polynomial(y_key, w_key)
+            for y_key, p in self._kl_table[w_key].items():
+                # Only show non-trivial polynomials (not 0 or 1 for diagonal)
+                if y_key == w_key:
+                    continue
                 
-                # Only show non-trivial polynomials (not 0 or 1)
-                if p != 0 and p != sp.Integer(0) and p != 1 and p != sp.Integer(1):
+                if p != 0 and p != sp.Integer(0):
                     if count >= max_pairs:
                         print(f"  ... (more pairs)")
                         return
                     
-                    y_str = self._format_wtilde(y, beta_y)
-                    w_str = self._format_wtilde(w, beta_w)
+                    y_w, y_beta = denormalize_key(y_key)
+                    w_w, w_beta = denormalize_key(w_key)
+                    
+                    y_str = self._format_wtilde(y_w, y_beta)
+                    w_str = self._format_wtilde(w_w, w_beta)
                     p_str = str(p).replace("**", "^")
-                    print(f"  P_[{y_str}, {w_str}] = {p_str}")
+                    print(f"  P[{y_str}, {w_str}] = {p_str}")
                     count += 1
         
         if count == 0:

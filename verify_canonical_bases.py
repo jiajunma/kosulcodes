@@ -3,14 +3,33 @@ import sympy as sp
 from HeckeRB import HeckeRB
 from RB import denormalize_key
 
-def verify_canonical_bases(n):
+def verify_canonical_bases(n, verbose=False):
     print(f"Initializing HeckeRB for n={n}...")
     R = HeckeRB(n)
     
     print("Computing KL polynomials...")
     R.compute_kl_polynomials(verbose=True)
     
-    print("Verifying bar-invariance of canonical basis elements...")
+    if verbose:
+        print("\nCanonical basis elements C[w] in H-basis:")
+        print("="*70)
+        
+        # Group basis elements by length for organized display
+        elements_by_length = R.elements_by_length
+        
+        for ell in sorted(elements_by_length.keys()):
+            print(f"\nLength {ell}:")
+            for key in elements_by_length[ell]:
+                w, beta = denormalize_key(key)
+                wtilde_str = R._format_wtilde(w, beta)
+                
+                # Compute canonical basis element
+                c_w = R.canonical_basis_element((w, beta))
+                c_str = R.format_element(c_w, use_H_basis=True)
+                
+                print(f"  C[{wtilde_str}] = {c_str}")
+    
+    print("\nVerifying bar-invariance of canonical basis elements...")
     all_ok = True
     count = 0
     total = len(list(R.basis()))
@@ -57,10 +76,16 @@ def verify_canonical_bases(n):
 
 if __name__ == "__main__":
     n = 2
-    if len(sys.argv) > 1:
-        try:
-            n = int(sys.argv[1])
-        except ValueError:
-            print(f"Invalid n: {sys.argv[1]}. Using default n=2.")
+    verbose = False
     
-    verify_canonical_bases(n)
+    # Parse command line arguments
+    for arg in sys.argv[1:]:
+        if arg == '-v' or arg == '--verbose':
+            verbose = True
+        else:
+            try:
+                n = int(arg)
+            except ValueError:
+                print(f"Invalid argument: {arg}. Using default n=2.")
+    
+    verify_canonical_bases(n, verbose=verbose)
