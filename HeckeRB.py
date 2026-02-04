@@ -588,6 +588,24 @@ class HeckeRB:
             print("  All elements reached!")
         return bar_table
 
+    def compute_R(self):
+        f"""
+        Compute the R-matrix for the Hecke module.
+        This is the coefficient in the expansion:
+        bar(H_x) = ∑_y R_{y,x} H_y
+
+        self.R[x][y] := R_{y,x}
+        """
+        if not hasattr(self, 'bar_table'):
+            self.bar_table = self.compute_bar_involution()
+        for x in self._basis:
+            R[x] = {}
+            for y in self.bar_table[x]:
+                R[x][y] = self.bar_table[x][y] * (-v) ** (self.ell_wtilde(x) + self.ell_wtilde(y))
+        self.R = R
+        return R
+
+
     def bar_T(self, element):
         """
         Compute the bar involution of an element in the T-basis.
@@ -803,7 +821,7 @@ class HeckeRB:
                                 continue
                             
                             # R'_{y,z} = (-v)^(ell_z + ell_y) * coefficient of T_y in bar(T_z)
-                            R_yz = self.bar_table[z].get(y, sp.Integer(0))
+                            R_yz = self.R[z].get(y, sp.Integer(0))
                             if R_yz == 0 or R_yz == sp.Integer(0):
                                 continue
                             
