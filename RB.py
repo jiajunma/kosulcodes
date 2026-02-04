@@ -497,7 +497,7 @@ def root_type_right(w, sigma):
                 T = "T-"
                 C.append(normalize_key_sigma(w_s_i, sigma_swapped))
                 print(f"w : {w}, sigma : {sigma}, i :{i}")
-                C.append(normalize_key_sigma(w_s_i, sigma_swapped | {i + 1}))
+                C.append(normalize_key_sigma(w_s_i, sigma_swapped | {i+1}))
             else:
                 raise ValueError(
                     f"Unhandled case for i={i}, inter={inter}, l(w s_i)>l(w), in fact this case should not happen"
@@ -509,15 +509,15 @@ def root_type_right(w, sigma):
             elif inter == {i}:
                 T = "T-"
                 C.append(normalize_key_sigma(w_s_i, sigma_swapped))
-                C.append(normalize_key_sigma(w, sigma_swapped | {i}))
+                C.append(normalize_key_sigma(w, sigma | {i+1}))
             elif inter == {i, i + 1}:
                 sigma_without_ip1 = set(sigma_set)
                 sigma_without_ip1.discard(i + 1)
-                sigma_without_i = set(sigma_set)
-                sigma_without_i.discard(i)
+                sigma_swapped_without_i = set(sigma_swapped)
+                sigma_swapped_without_i.discard(i)
                 T = "T+"
                 C.append(normalize_key_sigma(w, sigma_without_ip1))
-                C.append(normalize_key_sigma(w_s_i, sigma_without_i))
+                C.append(normalize_key_sigma(w_s_i, sigma_swapped_without_i))
             else:
                 raise ValueError(
                     f"Unhandled case for i={i}, inter={inter}, l(w s_i)<l(w), in fact this case should not happen"

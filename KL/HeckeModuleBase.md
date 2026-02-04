@@ -88,7 +88,5 @@ For a fixed $x$, we compute $P_{y,x}$ for all $y$ with $\ell(x) - \ell(y) = k+1$
 ### Testing
 After computing the KL polynomials, verify that everything works correctly for the `LeftCell` case.
 In the testing also print the canonical basis.
--- **!!important!!** You should check that $C_s$ is the form 
-
-
+-- **!!important!!** You should check that $C_s$ is of the form 
 
