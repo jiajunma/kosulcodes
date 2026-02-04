@@ -233,8 +233,7 @@ class HeckeRB:
         """
         result = {}
         for key, coeff in element.items():
-            w, beta = denormalize_key(key)
-            ell = self.ell_wtilde(w, beta)
+            ell = self.ell_wtilde(key)
             # T_{w̃} = (-v)^{ℓ(w̃)} H_{w̃}
             h_coeff = coeff * ((-v) ** ell)
             result[key] = result.get(key, sp.Integer(0)) + h_coeff
@@ -258,8 +257,7 @@ class HeckeRB:
         """
         result = {}
         for key, coeff in element.items():
-            w, beta = denormalize_key(key)
-            ell = self.ell_wtilde(w, beta)
+            ell = self.ell_wtilde(key)
             # H_{w̃} = (-v)^{-ℓ(w̃)} T_{w̃}
             t_coeff = coeff * ((-v) ** (-ell))
             result[key] = result.get(key, sp.Integer(0)) + t_coeff
@@ -777,6 +775,7 @@ class HeckeRB:
         for x in self._basis:
             KL[x] = {}
             # Step 2: Base case P_{x,x} = 1
+            #KL[x][x] = sp.Integer(1)
             KL[x][x] = sp.Integer(1)
 
         
@@ -793,7 +792,7 @@ class HeckeRB:
                 
                 for x in elements_by_length.get(ell_x, []):
                     for y in elements_by_length.get(ell_y, []):
-                        # Compute q_{y,x} = ∑_{y < z ≤ x} R_{y,z} · bar(P_{z,x})
+                        # Compute q_{y,x} = ∑_{y < z ≤ x} R'_{y,z} · bar(P_{z,x})
                         q_yx = sp.Integer(0)
                         
                         # Use already computed KL[x] which contains P_{z,x} for ell_z > ell_y
@@ -803,16 +802,18 @@ class HeckeRB:
                             if ell_z <= ell_y:
                                 continue
                             
-                            # R_{y,z} = coefficient of T_y in bar(T_z)
+                            # R'_{y,z} = (-v)^(ell_z + ell_y) * coefficient of T_y in bar(T_z)
                             R_yz = self.bar_table[z].get(y, sp.Integer(0))
                             if R_yz == 0 or R_yz == sp.Integer(0):
                                 continue
+                            
+                            R_prime_yz = ((-v)**(ell_z + ell_y)) * R_yz
                             
                             # bar(P_{z,x}): v -> v^{-1}
                             bar_P_zx = self.bar_coeff(P_zx)
                             
                             # Add to sum
-                            q_yx = q_yx + R_yz * bar_P_zx
+                            q_yx = q_yx + R_prime_yz * bar_P_zx
                         
                         # P_{y,x} = negative-power part of q_{y,x}
                         if q_yx != 0:
@@ -841,9 +842,19 @@ class HeckeRB:
         """
         poly = sp.expand(poly)
         
-        for (exp,), coeff in poly.all_terms():
-            if exp < 0:
-                result += coeff * (v ** exp)
+        if poly == 0 or poly == sp.Integer(0):
+            return sp.Integer(0)
+        
+        result = sp.Integer(0)
+        
+        # Manually extract terms
+        for term in sp.Add.make_args(poly):
+            # Get the power of v in this term
+            powers = term.as_powers_dict()
+            v_power = powers.get(v, 0)
+            
+            if v_power < 0:
+                result += term
         
         return sp.expand(result)
     
@@ -1133,9 +1144,12 @@ class HeckeRB:
         """Format (w, β) for display with colored partition using str_colored_partition from RB.py."""
         # Use the str_colored_partition function from RB.py
         colored_w = str_colored_partition(w, beta)
-        # Remove parentheses and commas to get just the colored permutation values
+        # Remove parentheses and commas
         colored_w = colored_w.replace("(", "").replace(")", "").replace(", ", "")
-        return colored_w
+        
+        # Add a representation of the beta set if needed, or just length
+        ell = self.ell_wtilde(normalize_key(w, beta))
+        return f"{colored_w}_{{{ell}}}"
 
     def _format_T_element(self, element):
         """Format an element in the T-basis, omitting the T_ prefix."""
