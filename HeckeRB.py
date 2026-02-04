@@ -31,6 +31,16 @@ class HeckeRB:
         for w in generate_permutations(n):
             for sigma in generate_all_sigma(w):
                 self._basis[normalize_key(w, sigma)] = root_type_right(w, sigma) 
+        
+        # Group elements by length
+        self.elements_by_length = {}
+        self.max_length = 0
+        for key in self._basis:
+            ell = self.ell_wtilde(key)
+            if ell not in self.elements_by_length:
+                self.elements_by_length[ell] = []
+            self.elements_by_length[ell].append(key)
+            self.max_length = max(self.max_length, ell)
 
     def basis(self):
         for key in self._basis:
@@ -304,11 +314,20 @@ class HeckeRB:
     # Bruhat order on RB (using RB_Bruhat module)
     # =========================================================================
     def _normalize_to_key(self, wtilde):
-        """Convert wtilde to normalized key format."""
+        """Convert wtilde to normalized key format for Bruhat order.
+        
+        RB_Bruhat expects keys in format (tuple(w), tuple(sorted(sigma))).
+        Our _basis uses keys in format (tuple(w), frozenset(sigma)).
+        """
         if isinstance(wtilde, tuple) and len(wtilde) == 2:
-            if isinstance(wtilde[1], set):
-                return normalize_key(*wtilde)
+            w, sigma = wtilde
+            # Convert frozenset to tuple(sorted(...))
+            if isinstance(sigma, frozenset):
+                return (tuple(w), tuple(sorted(sigma)))
+            elif isinstance(sigma, (set, list)):
+                return (tuple(w), tuple(sorted(sigma)))
             else:
+                # Already in correct format
                 return wtilde
         return wtilde
 
@@ -376,14 +395,8 @@ class HeckeRB:
         bar_table = {}
         
         # Step 1: Create list indexed by length
-        elements_by_length = {}
-        max_length = 0
-        for key in self._basis:
-            ell = self.ell_wtilde(key)
-            if ell not in elements_by_length:
-                elements_by_length[ell] = []
-            elements_by_length[ell].append(key)
-            max_length = max(max_length, ell)
+        elements_by_length = self.elements_by_length
+        max_length = self.max_length
         
         if verbose:
             print("Step 1: Elements by length")
@@ -728,93 +741,131 @@ class HeckeRB:
     # =========================================================================
     # Kazhdan-Lusztig basis computation
     # =========================================================================
+    def compute_kl_polynomials(self, verbose=False):
+        """
+        Compute all KL polynomials P_{y,x} using the inductive algorithm.
+        
+        Algorithm (following Lusztig's Lemma 24.2.1):
+        1. Ensure bar_table is computed (R_{x,y} = bar_table[y][x])
+        2. Set P_{x,x} = 1 for all x
+        3. For each length gap k = 1, 2, 3, ...:
+           For each pair (y, x) with ℓ(x) - ℓ(y) = k:
+             a) Compute q_{y,x} = ∑_{y < z ≤ x} R_{y,z} · bar(P_{z,x})
+             b) P_{y,x} = negative-power part of q_{y,x}
+        
+        Returns:
+            dict: KL[x][y] = P_{y,x} as a polynomial in v
+        """
+        # Ensure bar_table is computed
+        if not hasattr(self, 'bar_table'):
+            if verbose:
+                print("Computing bar_table first...")
+            self.bar_table = self.compute_bar_involution(verbose=False)
+        
+        # Initialize KL table
+        KL = {}
+        
+        # Step 1: Group elements by length
+        elements_by_length = self.elements_by_length
+        max_length = self.max_length
+        
+        if verbose:
+            print(f"\nComputing KL polynomials for {len(self._basis)} basis elements")
+            print(f"Max length: {max_length}")
+        
+        # Initialize all KL[x][x] dicts
+        for x in self._basis:
+            KL[x] = {}
+            # Step 2: Base case P_{x,x} = 1
+            KL[x][x] = sp.Integer(1)
+
+        
+        # Step 3: Induction on length gap k = ℓ(x) - ℓ(y)
+        for k in range(1, max_length + 1):
+            if verbose:
+                print(f"\nStep 3: Processing length gap k = {k}")
+            
+            count = 0
+            for ell_x in range(k, max_length + 1):
+                ell_y = ell_x - k
+                if ell_y not in elements_by_length:
+                    continue
+                
+                for x in elements_by_length.get(ell_x, []):
+                    for y in elements_by_length.get(ell_y, []):
+                        # Compute q_{y,x} = ∑_{y < z ≤ x} R_{y,z} · bar(P_{z,x})
+                        q_yx = sp.Integer(0)
+                        
+                        # Use already computed KL[x] which contains P_{z,x} for ell_z > ell_y
+                        for z, P_zx in KL[x].items():
+                            # y < z implies length(y) < length(z)
+                            ell_z = self.ell_wtilde(z)
+                            if ell_z <= ell_y:
+                                continue
+                            
+                            # R_{y,z} = coefficient of T_y in bar(T_z)
+                            R_yz = self.bar_table[z].get(y, sp.Integer(0))
+                            if R_yz == 0 or R_yz == sp.Integer(0):
+                                continue
+                            
+                            # bar(P_{z,x}): v -> v^{-1}
+                            bar_P_zx = self.bar_coeff(P_zx)
+                            
+                            # Add to sum
+                            q_yx = q_yx + R_yz * bar_P_zx
+                        
+                        # P_{y,x} = negative-power part of q_{y,x}
+                        if q_yx != 0:
+                            q_yx = sp.expand(q_yx)
+                            P_yx = self._extract_negative_powers(q_yx)
+                            if P_yx != 0:
+                                KL[x][y] = P_yx
+                                count += 1
+            
+            if verbose and count > 0:
+                print(f"  Computed {count} polynomials at gap k = {k}")
+        
+        # Store in cache
+        self._kl_table = KL
+        
+        if verbose:
+            print(f"\nKL polynomial computation complete!")
+        
+        return KL
+    
+    def _extract_negative_powers(self, poly):
+        """
+        Extract terms with negative powers of v from a polynomial.
+        
+        Returns the sum of all terms c_i * v^i where i < 0.
+        """
+        poly = sp.expand(poly)
+        
+        for (exp,), coeff in poly.all_terms():
+            if exp < 0:
+                result += coeff * (v ** exp)
+        
+        return sp.expand(result)
+    
     def kl_polynomial(self, y_key, w_key):
         """
-        Compute the KL polynomial P_{w̃,ỹ} for the mirabolic bimodule.
+        Get the KL polynomial P_{y,x} from the pre-computed table.
         
-        The canonical basis element H̃_{w̃} is defined as:
-        H̃_{w̃} = H_{w̃} + ∑_{ỹ < w̃} P_{w̃,ỹ} H_{ỹ}
+        The canonical basis element C_x is defined as:
+        C_x = T_x + ∑_{y < x} P_{y,x} T_y
         
         where:
-        - P_{w̃,ỹ} ∈ v^{-1}Z[v^{-1}] for ỹ < w̃
-        - deg P_{w̃,ỹ} ≤ (ℓ(w̃) - ℓ(ỹ) - 1) / 2
-        - H̃_{w̃} is bar-invariant
+        - P_{y,x} ∈ v^{-1}Z[v^{-1}] for y < x
+        - C_x is bar-invariant: bar(C_x) = C_x
         
-        Note: For the leading term (w̃ = ỹ), we use coefficient 1, not P.
+        Note: This returns KL[w_key][y_key] = P_{y_key, w_key}
         """
-        if not hasattr(self, '_kl_poly_cache'):
-            self._kl_poly_cache = {}
+        # Compute table if not already done
+        if not hasattr(self, '_kl_table'):
+            self.compute_kl_polynomials(verbose=False)
         
-        key = (y_key, w_key)
-        if key in self._kl_poly_cache:
-            return self._kl_poly_cache[key]
-        
-        # Diagonal: not really a "polynomial", but coefficient 1 for leading term
-        if y_key == w_key:
-            self._kl_poly_cache[key] = sp.Integer(1)
-            return sp.Integer(1)
-        
-        # Not comparable in Bruhat order
-        if not self.is_bruhat_leq(y_key, w_key):
-            self._kl_poly_cache[key] = sp.Integer(0)
-            return sp.Integer(0)
-        
-        ell_y = self.ell_wtilde(y_key)
-        ell_w = self.ell_wtilde(w_key)
-        
-        # For cover relations (length difference 1), P = 0
-        # (The canonical basis differs from H basis only by lower order terms
-        #  which come from the bar-invariance requirement, not from adjacent covers)
-        if ell_w - ell_y == 1:
-            self._kl_poly_cache[key] = sp.Integer(0)
-            return sp.Integer(0)
-        
-        # General case: use recursive computation
-        result = self._compute_kl_recursive(y_key, w_key)
-        self._kl_poly_cache[key] = result
-        return result
-    
-    def _compute_kl_recursive(self, y_key, w_key):
-        """
-        Compute KL polynomial P_{w̃, ỹ} using the proper recursion.
-        
-        The KL polynomial satisfies:
-        - P_{w̃, w̃} = 1
-        - P_{w̃, ỹ} ∈ v^{-1}Z[v^{-1}] for ỹ < w̃  
-        - deg(P_{w̃, ỹ}) ≤ (ℓ(w̃) - ℓ(ỹ) - 1) / 2
-        
-        For adjacent elements (covers in Bruhat order), P = 0.
-        The KL polynomial is only non-zero when there are specific geometric conditions.
-        """
-        ell_y = self.ell_wtilde(y_key)
-        ell_w = self.ell_wtilde(w_key)
-        
-        # For adjacent pairs (length difference 1), P = 0 in v^{-1}Z[v^{-1}]
-        # Actually, looking at standard KL theory more carefully:
-        # The coefficient in H̃_w = H_w + ∑_{y<w} P_{w,y} H_y
-        # has P_{w,y} = 0 when the length difference is odd and small
-        
-        # The correct approach is:
-        # For length diff = 1: P = 0 (cover relation in Bruhat order)
-        # For length diff > 1: Use the recursive formula involving mu coefficients
-        
-        if ell_w - ell_y == 1:
-            # Adjacent in Bruhat order - P = 0 for proper KL polynomial
-            # (The coefficient comes from the mu function, not P directly)
-            return sp.Integer(0)
-        
-        # For longer differences, use the iterative bar-invariance algorithm
-        # The KL polynomial is determined by requiring bar-invariance
-        
-        # The proper implementation uses:
-        # bar(H_w) = H_w + ∑_{y<w} terms
-        # And H̃_w = H_w + ∑_{y<w} P_{w,y} H_y must be bar-invariant
-        
-        # For the bimodule, we use the W-graph structure
-        # P_{w,y} = 0 unless there's a specific edge in the W-graph
-        
-        # Default: P = 0 for non-adjacent pairs without specific structure
-        return sp.Integer(0)
+        # Return P_{y,x}
+        return self._kl_table.get(w_key, {}).get(y_key, sp.Integer(0))
 
     def mu_coefficient(self, y_key, w_key):
         """
@@ -878,50 +929,26 @@ class HeckeRB:
         """
         Compute the canonical (KL) basis element H̃_{w̃}.
         
-        H̃_{w̃} = H_{w̃} + ∑_{ỹ < w̃} P_{w̃,ỹ} H_{ỹ}
+        C_{w̃} = ∑_{ỹ <=  w̃} P_{ỹ,w̃} T_{ỹ}
         
-        The element H̃_{w̃} is bar-invariant.
+        The element C_{w̃} is bar-invariant.
         """
-        if isinstance(wtilde, tuple) and len(wtilde) == 2 and isinstance(wtilde[1], set):
-            key = normalize_key(*wtilde)
-        else:
-            key = wtilde
-        
-        w, beta = denormalize_key(key)
-        result = {key: sp.Integer(1)}
-        
-        # Add contributions from lower elements
-        lower = self.bruhat_lower_elements(key)
-        for y_key in lower:
-            p = self.kl_polynomial(y_key, key)
-            if p != 0:
-                result[y_key] = result.get(y_key, 0) + p
-        
-        return self.regular_coefficient(result)
 
-    def canonical_basis(self):
-        """
-        Compute the full canonical (Kazhdan-Lusztig) basis for the bimodule R.
+        # Ensure KL polynomials are computed
+        if not hasattr(self, '_kl_table'):
+            self.compute_kl_polynomials()
         
-        Returns:
-            dict mapping keys (w, beta) to their canonical basis elements.
-        """
-        # Sort elements by length (dimension)
-        elements_by_length = {}
-        for key in self._basis:
-            ell = self.ell_wtilde(key)
-            if ell not in elements_by_length:
-                elements_by_length[ell] = []
-            elements_by_length[ell].append(key)
+        # C_{w̃} = ∑_{ỹ <= w̃} P_{ỹ,w̃} T_{ỹ}
+        result = {}
         
-        basis = {}
+        # Sum over all elements in KL[x]
+        x_key = normalize_key(*wtilde)
+        for y_key, p in self._kl_table[x_key].items():
+            if p != 0 and p != sp.Integer(0):
+                result[y_key] = p
         
-        # Process in order of increasing length
-        for ell in sorted(elements_by_length.keys()):
-            for key in elements_by_length[ell]:
-                basis[key] = self.canonical_basis_element(key)
-        
-        return basis
+        return result 
+
 
     def format_element(self, element, use_H_basis=True):
         """
@@ -995,12 +1022,7 @@ class HeckeRB:
         - H̃_{w̃} = H_{w̃} + ∑_{ỹ < w̃} P_{w̃,ỹ} H_{ỹ} with P_{w̃,ỹ} ∈ v^{-1}Z[v^{-1}]
         """
         # Sort elements by length
-        elements_by_length = {}
-        for key in self._basis:
-            ell = self.ell_wtilde(key)
-            if ell not in elements_by_length:
-                elements_by_length[ell] = []
-            elements_by_length[ell].append(key)
+        elements_by_length = self.elements_by_length
         
         # Dictionary to store the canonical basis elements
         # C_tilde[key] = {key2: coeff} representing H̃_{key}
@@ -1074,14 +1096,11 @@ class HeckeRB:
         print(f"Number of basis elements: {len(self._basis)}")
         
         # Count by length
-        length_counts = {}
-        for key in self._basis:
-            ell = self.ell_wtilde(key)
-            length_counts[ell] = length_counts.get(ell, 0) + 1
+        elements_by_length = self.elements_by_length
         
         print("Elements by length:")
-        for ell in sorted(length_counts.keys()):
-            print(f"  ℓ={ell}: {length_counts[ell]} elements")
+        for ell in sorted(elements_by_length.keys()):
+            print(f"  ℓ={ell}: {len(elements_by_length[ell])} elements")
 
     def print_hecke_action(self, i, max_elements=10):
         """
