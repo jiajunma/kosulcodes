@@ -267,6 +267,21 @@ def tilde_inverse_sigma(w, sigma):
     sigma_img = beta_to_sigma(w_inv, beta_img)
     return w_inv, sigma_img
 
+def anti_involution_sigma(w, sigma, validate=True):
+    """
+    Anti-automorphism on RB' (w, sigma): (w^{-1}, w(sigma)).
+
+    Here sigma is a subset of positions (1-indexed), and w(sigma) denotes
+    the image set {w(i) | i in sigma}.
+    """
+    w_inv = inverse_permutation(w)
+    sigma_img = {w[i - 1] for i in sigma}
+    if validate:
+        assert is_decreasing_on_subset(w_inv, sigma_img), (
+            f"Sigma={sigma_img} does not satisfy decreasing on w_inv={w_inv}"
+        )
+    return w_inv, sigma_img
+
 
 def fourier_transform(w, beta):
     """
@@ -460,10 +475,29 @@ def root_type2(w, sigma):
 
 def root_type_right(w, sigma):
     """
-    Determine the root type for each simple reflection s_i for the right action .
+    Determine the root type for each simple reflection s_i for the right action
+    using the anti-involution tau: (w, sigma) -> (w^{-1}, w(sigma)).
+    """
+    n = len(w)
+    result = [None] * (n + 1)
+    result[0] = length_of_permutation(w) + len(sigma_to_beta(w, sigma))
 
-    For each i in {1, ..., n-1}, classify (s'_i, O_sigma) into U-/U+/T-/T+
-    and compute the corresponding s'_i-companion(s).
+    w_tau, sigma_tau = anti_involution_sigma(w, sigma, validate=True)
+    left_types = root_type_left(w_tau, sigma_tau)
+
+    for i in range(1, n):
+        T, comps = left_types[i]
+        C = []
+        for ww, ss in comps:
+            ww_inv, ss_img = anti_involution_sigma(ww, ss, validate=True)
+            C.append(normalize_key_sigma(ww_inv, ss_img))
+        result[i] = (T, C)
+
+    return result
+
+def root_type_left(w, sigma):
+    """
+    Determine the root type for each simple reflection s_i for the left action.
 
     Args:
         w: A permutation (tuple or list)
@@ -474,54 +508,75 @@ def root_type_right(w, sigma):
     """
     n = len(w)
     sigma_set = set(sigma)
-    beta = sigma_to_beta(w, sigma)
+    w_sigma_image = {w[i - 1] for i in sigma_set}
+    w_inv = inverse_permutation(w)
     l_w = length_of_permutation(w)
-    result = [None]* (n+1) 
-    # Store the length of (w, beta) at the beginning of the list
-    result[0] = l_w + len(beta)
+    result = [None] * (n + 1)
+    result[0] = l_w + len(sigma_to_beta(w, sigma))
 
     for i in range(1, n):
         s_i = transposition(i, i + 1, n)
-        w_s_i = permutation_prod(w, s_i)
-        inter = sigma_set & {i, i + 1}
-        sigma_swapped = {s_i[j - 1] for j in sigma_set}
+        s_i_w = permutation_prod(s_i, w)
+        l_siw = length_of_permutation(s_i_w)
+        inter = w_sigma_image & {i, i + 1}
 
-        C = [normalize_key_sigma(w,sigma)]
+        C = [normalize_key_sigma(w, sigma_set)]
         T = ""
-        # If l(w s_i) > l(w) <===> w(i)<w(i+1).  
-        if w[i-1] < w[i]:
+
+        def exists_j_between(lower, upper):
+            for j in w_sigma_image:
+                if j <= i + 1:
+                    continue
+                pos = w_inv[j - 1]
+                if lower < pos < upper:
+                    return True
+            return False
+
+        if l_siw > l_w:
             if inter == {i} or not inter:
                 T = "U-"
-                C.append(normalize_key_sigma(w_s_i, sigma_swapped))
+                C.append(normalize_key_sigma(s_i_w, sigma_set))
             elif inter == {i + 1}:
-                T = "T-"
-                C.append(normalize_key_sigma(w_s_i, sigma_swapped))
-                print(f"w : {w}, sigma : {sigma}, i :{i}")
-                C.append(normalize_key_sigma(w_s_i, sigma_swapped | {i+1}))
+                lower = w_inv[i - 1]
+                upper = w_inv[i]
+                if exists_j_between(lower, upper):
+                    T = "U-"
+                    C.append(normalize_key_sigma(s_i_w, sigma_set))
+                else:
+                    T = "T-"
+                    C.append(normalize_key_sigma(s_i_w, sigma_set))
+                    C.append(normalize_key_sigma(s_i_w, sigma_set | {w_inv[i - 1]}))
             else:
                 raise ValueError(
-                    f"Unhandled case for i={i}, inter={inter}, l(w s_i)>l(w), in fact this case should not happen"
+                    f"Unhandled case for i={i}, inter={inter}, l(s_i w)>l(w)"
                 )
-        else:
+        elif l_siw < l_w:
             if inter == {i + 1} or not inter:
                 T = "U+"
-                C.append(normalize_key_sigma(w_s_i, sigma_swapped))
+                C.append(normalize_key_sigma(s_i_w, sigma_set))
             elif inter == {i}:
-                T = "T-"
-                C.append(normalize_key_sigma(w_s_i, sigma_swapped))
-                C.append(normalize_key_sigma(w, sigma | {i+1}))
+                lower = w_inv[i]
+                upper = w_inv[i - 1]
+                if exists_j_between(lower, upper):
+                    T = "U+"
+                    C.append(normalize_key_sigma(s_i_w, sigma_set))
+                else:
+                    T = "T-"
+                    C.append(normalize_key_sigma(s_i_w, sigma_set))
+                    C.append(normalize_key_sigma(w, sigma_set | {w_inv[i]}))
             elif inter == {i, i + 1}:
                 sigma_without_ip1 = set(sigma_set)
-                sigma_without_ip1.discard(i + 1)
-                sigma_swapped_without_i = set(sigma_swapped)
-                sigma_swapped_without_i.discard(i)
+                sigma_without_ip1.discard(w_inv[i])
                 T = "T+"
                 C.append(normalize_key_sigma(w, sigma_without_ip1))
-                C.append(normalize_key_sigma(w_s_i, sigma_swapped_without_i))
+                C.append(normalize_key_sigma(s_i_w, sigma_without_ip1))
             else:
                 raise ValueError(
-                    f"Unhandled case for i={i}, inter={inter}, l(w s_i)<l(w), in fact this case should not happen"
+                    f"Unhandled case for i={i}, inter={inter}, l(s_i w)<l(w)"
                 )
+        else:
+            raise ValueError(f"Unexpected length equality for i={i}")
+
         result[i] = (T, C)
 
     return result

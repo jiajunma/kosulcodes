@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 
+
 from HeckeRB import HeckeRB
 from RB import denormalize_key
 import sympy as sp
 
-def print_bar_involution_details(R, limit=10):
+def print_bar_involution_details(R, limit=30):
     """
     Print detailed information about the bar involution for each basis element.
 
@@ -14,10 +15,10 @@ def print_bar_involution_details(R, limit=10):
     """
     print("\nDetailed Bar Involution Table:")
     print("=" * 110)
-    print(f"{'Element':<25} {'Bar Involution':<45} {'Pattern':<30} {'|β| (Size)'}")
+    print(f"{'Element':<25} {'Bar Involution':<45} ")
     print("=" * 110)
 
-    # Sort keys by size of beta for clearer pattern visibility
+    # Sort keys by size of sigma for clearer pattern visibility
     sorted_keys = sorted(R._basis, key=lambda k: (len(denormalize_key(k)[1]), k))
 
     count = 0
@@ -26,37 +27,20 @@ def print_bar_involution_details(R, limit=10):
             print(f"... ({len(R._basis) - limit} more elements not shown)")
             break
 
-        w, beta = denormalize_key(key)
+        w, sigma = denormalize_key(key)
         T_wtilde = {key: sp.Integer(1)}
         bar_T = R.bar_T(T_wtilde)
 
         # Format the element and its bar involution
-        wtilde_str = R._format_wtilde(w, beta)
+        wtilde_str = R._format_wtilde(w, sigma)
         bar_str = R._format_T_element(bar_T)
 
-        # Analyze the pattern
-        pattern = "T_(w,β) → "
-        if len(beta) == 0:
-            pattern += "T_(w,β)"
-        else:
-            pattern += f"v^(-{2*len(beta)}) · T_(w,β)"
 
-        beta_size = len(beta)
-
-        print(f"[{wtilde_str}]".ljust(25), "→".ljust(5), f"{bar_str}".ljust(45),
-              pattern.ljust(30), f"{beta_size}")
+        print(f"[{wtilde_str}]".ljust(25), "→".ljust(5), f"{bar_str}".ljust(45))
         count += 1
 
     print("=" * 110)
 
-    # Summary of the pattern
-    print("\nBar Involution Pattern Summary:")
-    print("-" * 70)
-    print("For any basis element T_(w,β):")
-    print("  bar(T_(w,β)) = v^(-2|β|) · T_(w,β)")
-    print("where |β| is the size of the set β.")
-    print("-" * 70)
-    print("This pattern guarantees that bar(bar(T_(w,β))) = T_(w,β) for all elements.")
 
 if __name__ == "__main__":
     import argparse
