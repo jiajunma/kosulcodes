@@ -99,45 +99,6 @@ class HeckeRB:
                 result[k] = result.get(k, 0) + coeff * c
         return result
 
-    # def right_action_H_simple(self, element, i):
-    #     """
-    #     Right action by H_{s_i} on an element in the H-basis.
-    #     
-    #     H_{s_i} = (-v)^{-1} T_{s_i}, so:
-    #     element · H_{s_i} = (-v)^{-1} (element · T_{s_i})
-    #     
-    #     But we need to convert between H and T bases properly.
-    #     For H_{w̃} = (-v)^{-ℓ(w̃)} T_{w̃}:
-    #     H_{w̃} · H_s in H-basis involves the action of T_s and length changes.
-    #     """
-    #     result = {}
-    #     for key, coeff in element.items():
-    #         w, beta = denormalize_key(key)
-    #         ell_w = self.ell_wtilde(w, beta)
-    #         
-    #         # H_{w̃} · H_s = (-v)^{-ℓ(w̃)} T_{w̃} · (-v)^{-1} T_s
-    #         #             = (-v)^{-ℓ(w̃)-1} T_{w̃} · T_s
-    #         
-    #         # Compute T_{w̃} · T_s
-    #         action_T = self.right_action_basis_simple((w, beta), i)
-    #         
-    #         for k, c in action_T.items():
-    #             w2, beta2 = denormalize_key(k)
-    #             ell_w2 = self.ell_wtilde(w2, beta2)
-    #             
-    #             # T_{w̃} · T_s = ∑ c_k T_{w̃_k}
-    #             # H_{w̃} · H_s = (-v)^{-ℓ(w̃)-1} ∑ c_k T_{w̃_k}
-    #             #             = ∑ c_k (-v)^{-ℓ(w̃)-1} T_{w̃_k}
-    #             #             = ∑ c_k (-v)^{-ℓ(w̃)-1} (-v)^{ℓ(w̃_k)} H_{w̃_k}
-    #             #             = ∑ c_k (-v)^{ℓ(w̃_k)-ℓ(w̃)-1} H_{w̃_k}
-    #             
-    #             h_coeff = coeff * c * ((-v) ** (ell_w2 - ell_w - 1))
-    #             result[k] = result.get(k, sp.Integer(0)) + h_coeff
-    #     
-    #     return {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
-
-
-
     def right_action_basis_by_w(self, wtilde, w):
         """
         Compute the right action of T_w on a basis element T_{wtilde}.
@@ -761,7 +722,7 @@ class HeckeRB:
     # Kazhdan-Lusztig basis computation
     # =========================================================================
     def compute_kl_polynomials(self, verbose=False):
-        f"""
+        """
         Compute all KL polynomials P_{y,x} using the inductive algorithm.
         
         Algorithm (following Lusztig's Lemma 24.2.1):
@@ -901,7 +862,7 @@ class HeckeRB:
         """
         Compute the mu coefficient μ(ỹ, w̃).
         
-        The mu coefficient is defined as the coefficient of v^{-(ℓ(w̃)-ℓ(ỹ))}
+        The mu coefficient is defined as the coefficient of v^{-1} 
         in the KL polynomial P_{ỹ,w̃}.
         
         For the W-graph, μ(ỹ, w̃) ≠ 0 implies an edge from ỹ to w̃.
@@ -930,16 +891,15 @@ class HeckeRB:
                 # Extract coefficient of v^{-1}
                 # This is the standard definition: μ(y,w) = coeff of v^{-1} in P_{y,w}
                 target_exp = -diff
-                
-                p_expanded = sp.expand(p)
-                coeff = sp.Integer(0)
-                for term in sp.Add.make_args(p_expanded):
-                    powers = term.as_powers_dict()
-                    v_power = powers.get(v, 0)
-                    if v_power == target_exp:
-                        coeff += term / (v ** v_power)
-                
-                coeff = sp.expand(coeff)
+                target_exp = -1 
+                # Extract the coefficient of v**target_exp in the polynomial p
+                poly = sp.expand(p)
+                coeff_sum = sp.Integer(0)
+
+
+                # Extract coefficient of v^target_exp using Poly
+                p_poly = sp.Poly(poly, v)
+                coeff = p_poly.coeff_monomial(v**target_exp)
                 if coeff != sp.Integer(0):
                     self.mu[w_key][y_key] = coeff
 
@@ -952,9 +912,6 @@ class HeckeRB:
         in the KL polynomial P_{ỹ,w̃}.
         
         For the W-graph, μ(ỹ, w̃) ≠ 0 implies an edge from ỹ to w̃.
-        
-        In the standard basis action:
-        H̃_{w̃} · H̃_s = ... + ∑_{ỹ: s ∈ τ(ỹ), s ∉ τ(w̃)} μ(ỹ, w̃) H̃_{ỹ} + ...
         
         Returns:
             The mu coefficient (integer or 0)

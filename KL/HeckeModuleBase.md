@@ -65,7 +65,13 @@ $$bar(T_x) = \sum_{y \in B} R_{y,x} T_y$$
 ## 6. Kazhdan-Lusztig (Canonical) Basis
 The canonical basis elements $C_x$ are uniquely determined by:
 - $bar(C_x) = C_x$ (Self-duality)
-- $C_x = \sum_{y \le x} P_{y,x}(v) T_y$ where $P_{x,x} = 1$ and $P_{y,x} \in v^{-1}\mathbb{Z}[v^{-1}]$ for $y < x$.
+  implies
+  C_x = \sum_z P_{z,x} H_z= \sum_{z<= y <=x}  bar(P_y,x) R_{z,y}H_z = bar(C_x)
+  i.e.
+  P_{z,x} = \sum_{z<=y<=x} R_{z,y} bar(P_{y,x})
+  => 
+  P_{z,x} - bar(P_{z,x}) = sum_{z < y <= x} R_{z,y} bar(P_{y,x})  
+- $C_x = \sum_{y \le x} P_{y,x}(v) H_y$ where $P_{x,x} = 1$ and $P_{y,x} \in v^{-1}\mathbb{Z}[v^{-1}]$ for $y < x$.
 
 
 

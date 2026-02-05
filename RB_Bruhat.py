@@ -4,9 +4,10 @@ from itertools import chain
 from RB import (
     generate_all_w_sigma_pairs,
     dim_Omega_w_sigma,
-    root_type1,
-    root_type2,
 )
+from RB import root_type_left as root_type1
+from RB import root_type_right as root_type2
+
 from perm import length_of_permutation
 
 
