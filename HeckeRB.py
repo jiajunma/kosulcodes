@@ -992,66 +992,56 @@ class HeckeRB:
         Returns:
             dict mapping (w, beta) keys to coefficients (in H-basis)
         """
-        # Create H_underline_{s_i} = v^{-1} T_{s_i} + v^{-1} in T-basis
+        # Create H_underline_{s_i} = -v^{-1} T_{s_i} -v^{-1} in T-basis
         s = simple_reflection(i, self.n)
         h_underline_si = {tuple(s): -v**(-1), tuple(range(1, self.n + 1)): -v**(-1)}
         
         # Apply right action by H_underline_{s_i} using right_action_hecke
-        result = self.right_action_hecke(element, h_underline_si)
+        element_h = self.H_to_T(element)
+        result = self.right_action_hecke(element_h, h_underline_si)
+        result = self.T_to_H(result)
         
         return result
 
-    def verify_proposition_9(self, w_key, i):
-        """
-        Verify Proposition 9 for a given basis element and simple reflection s_i.
-        
-        Proposition 9 states:
-        H_underline_w * H_underline_si = 
-            -(v^-1 + v) H_underline_w if w in Phi_i
-            H_underline_{w * si} + sum_{w' < w, w' in Phi_i} mu(w', w) H_underline_w' if w not in Phi_i
-        """
-        # 1. Left side: H_underline_w * H_underline_si
 
-        h_w = self.canonical_basis_element(w_key) # in H-basis
-        h_w_H = self.H_to_T(h_w)
-        #print(f"h_w_H: {h_w_H}")
-        lhs = self.right_action_H_underline_simple(h_w_H, i)
-        lhs = self.T_to_H(lhs)
+    def H_to_C(self, element):
+        """
+        Convert an element from H-basis to C-basis.
         
-        # 2. Right side
-        rhs = {}
-        if self.is_in_Phi_i(w_key, i):
-            # -(v^-1 + v) H_underline_w
-            factor = -(v**-1 + v)
-            for k, c in h_w.items():
-                rhs[k] = sp.expand(factor * c)
-        else:
-            # H_underline_{w * si} + sum_{w' < w, w' in Phi_i} mu(w', w) H_underline_w'
-            w_star_si = self.wtilde_star_si(w_key, i)
-            h_w_star = self.canonical_basis_element(w_star_si)
-            for k, c in h_w_star.items():
-                rhs[k] = rhs.get(k, sp.Integer(0)) + c
+        Given an element ∑ c_x H_x in H-basis, we want to express it as ∑ d_y C_y in C-basis.
+        
+        Since C_x = ∑_y P_{y,x} H_y, we have H_x = ∑_y Q_{y,x} C_y where Q is the inverse of P.
+        
+        Therefore: ∑ c_x H_x = ∑ c_x (∑_y Q_{y,x} C_y) = ∑_y (∑_x c_x Q_{y,x}) C_y
+        
+        Args:
+            element: dict mapping (w, beta) keys to coefficients (in H-basis)
             
-            # Mu terms
-            if not hasattr(self, 'mu'):
-                self.compute_mu_coefficients()
+        Returns:
+            dict mapping (w, beta) keys to coefficients (in C-basis)
+        """
+        # Ensure inverse KL polynomials are computed
+        if not hasattr(self, '_inverse_kl_table'):
+            self.compute_inverse_kl_polynomials()
+        
+        result = {}
+        
+        # For each C_y in the result, compute coefficient ∑_x c_x Q_{x,y}
+        for y_key in self._basis:
+            coeff = sp.Integer(0)
             
-            # Sum over w' < w
-            for w_prime_key, mu_val in self.mu.get(w_key, {}).items():
-                if self.is_in_Phi_i(w_prime_key, i):
-                    h_w_prime = self.canonical_basis_element(w_prime_key)
-                    for k, c in h_w_prime.items():
-                        rhs[k] = rhs.get(k, sp.Integer(0)) + mu_val * c
+            # Sum over all x with non-zero coefficient in element
+            for x_key, c_x in element.items():
+                # Get Q_{x,y} from inverse KL table
+                Q_yx = self.inverse_kl_polynomial(y_key, x_key)
+                
+                if Q_yx != 0 and Q_yx != sp.Integer(0):
+                    coeff += c_x * Q_yx
+            
+            if coeff != 0 and coeff != sp.Integer(0):
+                result[y_key] = sp.expand(coeff)
         
-        rhs = {k: sp.expand(c) for k, c in rhs.items() if sp.expand(c) != 0}
-        
-        # 3. Compare
-        equal = self.is_equal(lhs, rhs)
-        if not equal:
-            # Optional: print detailed difference if needed during debug
-            pass
-        return equal
-    
+        return result
 
 
 
@@ -1120,13 +1110,15 @@ class HeckeRB:
         return result 
 
 
-    def format_element(self, element, use_H_basis=True):
+
+    def format_element(self, element, use_H_basis=True, use_C_basis=False):
         """
         Format an element for pretty printing with colored partitions.
 
         Args:
             element: dict mapping keys to coefficients
             use_H_basis: if True, show as H_{w̃}, else as T_{w̃} (prefix is omitted)
+            use_C_basis: if True, show as C_{w̃} (overrides use_H_basis)
         """
         if not element:
             return "0"
@@ -1154,7 +1146,9 @@ class HeckeRB:
 
             # Format basis element with colored partition
             wtilde_str = self._format_wtilde(w, beta)
-            if use_H_basis:
+            if use_C_basis:
+                basis_str = f"C[{wtilde_str}]"
+            elif use_H_basis:
                 basis_str = f"H[{wtilde_str}]"
             else:
                 basis_str = f"[{wtilde_str}]"

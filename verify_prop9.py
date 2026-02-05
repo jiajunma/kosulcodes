@@ -19,42 +19,40 @@ def test_prop9(n):
     for w_key in hrb.basis():
         w, sigma = denormalize_key(w_key)
         for i in range(1, n):
+            h_w = hrb.canonical_basis_element(w_key)
+            lhs = hrb.right_action_H_underline_simple(h_w, i)
+            
+            lhs_c = hrb.H_to_C(lhs)
+
+            rhs = {}
+            # The right side is also computed in canonical basis basis 
+            if hrb.is_in_Phi_i(w_key, i):
+               rhs[w_key] = -(v**(-1) + v**(1)) 
+            else:
+                w_star_si = hrb.wtilde_star_si(w_key, i)
+                rhs[w_star_si] = sp.Integer(1) 
+                for w_prime_key, mu_val in hrb.mu.get(w_key, {}).items():
+                    rhs[w_prime_key] = mu_val 
+                
+            rhs_c = {k: sp.expand(c) for k, c in rhs.items() if sp.expand(c) != 0}
+            
             total_checked += 1
-            is_valid = hrb.verify_proposition_9(w_key, i)
-            if is_valid:
+            if hrb.is_equal(lhs_c, rhs_c):
                 total_passed += 1
             else:
-                print(f"FAILED: Proposition 9 for w={w}, sigma={set(sigma)}, i={i}")
-                # Print LHS and RHS
-                h_w = hrb.canonical_basis_element(w_key)
-                h_w_H = hrb.H_to_T(h_w)
-                lhs = hrb.right_action_H_underline_simple(h_w, i)
-                lhs = hrb.T_to_H(lhs)
-                
-                rhs = {}
-                if hrb.is_in_Phi_i(w_key, i):
-                    factor = -(v**-1 + v)
-                    for k, c in h_w.items():
-                        rhs[k] = sp.expand(factor * c)
-                else:
-                    w_star_si = hrb.wtilde_star_si(w_key, i)
-                    h_w_star = hrb.canonical_basis_element(w_star_si)
-                    for k, c in h_w_star.items():
-                        rhs[k] = rhs.get(k, sp.Integer(0)) + c
-                    
-                    for w_prime_key, mu_val in hrb.mu.get(w_key, {}).items():
-                        if hrb.is_in_Phi_i(w_prime_key, i):
-                            h_w_prime = hrb.canonical_basis_element(w_prime_key)
-                            for k, c in h_w_prime.items():
-                                rhs[k] = rhs.get(k, sp.Integer(0)) + mu_val * c
-                
-                rhs = {k: sp.expand(c) for k, c in rhs.items() if sp.expand(c) != 0}
-                
+                print(f"-"*60)
+                print(f"  FAILED for {hrb.format_element({w_key: sp.Integer(1)}, use_C_basis=True)}, i={i}")
                 print(f"  Is in Phi_i: {hrb.is_in_Phi_i(w_key, i)}")
-                print(f"  LHS: {hrb.format_element(lhs)}")
-                print(f"  RHS: {hrb.format_element(rhs)}")
+                root_type, companions = hrb._basis[w_key][i]
+                print(f"  Root Type: {root_type}")
+                # Format companions list properly - join elements with ", "
+                comp_strs = [hrb.format_element({c: sp.Integer(1)}, use_C_basis=True) for c in companions]
+                print(f"  Companions: [{', '.join(comp_strs)}]")
+                if not hrb.is_in_Phi_i(w_key,i):
+                    print(f"  w~*s_i: {hrb.format_element({w_star_si: sp.Integer(1)}, use_C_basis=True)}")
+                print(f"  LHS_C: {hrb.format_element(lhs_c, use_C_basis=True)}")
+                print(f"  RHS_C: {hrb.format_element(rhs_c, use_C_basis=True)}")
                 
-                # Only show one failure for now
     print(f"Proposition 9 Passed for  {total_passed}/{total_checked}")
 
 if __name__ == "__main__":
