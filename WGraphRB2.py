@@ -3,6 +3,7 @@ import subprocess
 import re
 from HeckeRB import HeckeRB, denormalize_key, normalize_key
 from RB import tilde_inverse_sigma
+import sympy as sp
 
 class WGraph2:
     def __init__(self, n):
@@ -31,20 +32,30 @@ class WGraph2:
                 # Convert result to C-basis
                 lhs_c = self.hrb.H_to_C(lhs_h)
                 
+                # Format and print the results
+                w_str = self.hrb.format_element({w_key: 1}, use_C_basis=True)
+                print(f"{w_str} * H_{i} = {self.hrb.format_element(lhs_c, use_C_basis=True)}")
+
                 # For each C_y that appears in the expansion
-                for y_key in lhs_c:
-                    if w_key == y_key:
+                for y_key, coeff in lhs_c.items():
+                    if sp.expand(coeff) == 0  or w_key == y_key:
                         continue
                     edge = (w_key, y_key)
                     if edge not in self._edges:
                         self._edges[edge] = set()
                     self._edges[edge].add(i)
-                lhs_h = self.hrb.right_action_H_underline_simple(c_w_inv, i)
+
+                lhs_h_inv = self.hrb.right_action_H_underline_simple(c_w_inv, i)
                 # Convert result to C-basis
-                lhs_c_inv = self.hrb.H_to_C(lhs_h)
+                lhs_c_inv = self.hrb.H_to_C(lhs_h_inv)
+                
+                w_inv_str = self.hrb.format_element({w_inv_key: 1}, use_C_basis=True)
+                print(f"{w_inv_str} * H_{i} = {self.hrb.format_element(lhs_c_inv, use_C_basis=True)}")
+
                 # For each C_y that appears in the expansion
-                for y_key in lhs_c_inv:
-                    if w_key == y_key:
+                for y_inv_key, coeff in lhs_c_inv.items():
+                    y_key = normalize_key(*tilde_inverse_sigma(*y_inv_key))
+                    if sp.expand(coeff) == 0  or w_key == y_key:
                         continue
                     edge = (w_key, y_key)
                     if edge not in self._edges:
@@ -145,11 +156,23 @@ class WGraph2:
             lines.append(f'    {v_id} [label=<{label}>, fillcolor="{color}"];')
             
         # Draw edges
-        for (w_key, y_key), indices in self._edges.items():
+        processed_edges = set()
+        for (w_key, y_key) in self._edges:
+            if (w_key, y_key) in processed_edges:
+                continue
+                
             w_id = v_to_id[w_key]
             y_id = v_to_id[y_key]
-            label_str = ""
-            lines.append(f'    {w_id} -> {y_id} [label="{label_str}"];')
+            
+            if (y_key, w_key) in self._edges:
+                # Bidirectional edge
+                lines.append(f'    {w_id} -> {y_id} [dir=both, label=""];')
+                processed_edges.add((y_key, w_key))
+            else:
+                # Unidirectional edge
+                lines.append(f'    {w_id} -> {y_id} [label=""];')
+            
+            processed_edges.add((w_key, y_key))
             
         lines.append('}')
         return "\n".join(lines)

@@ -1041,8 +1041,10 @@ class HeckeRB:
             if coeff != 0 and coeff != sp.Integer(0):
                 result[y_key] = sp.expand(coeff)
         
-        return result
+        # Remove zero coefficients and normalize expressions before returning
+        result = {k: sp.expand(c) for k, c in result.items() if sp.expand(c) != 0}
 
+        return result
 
 
     def print_mu_coefficients(self, max_pairs=None):
