@@ -1,7 +1,7 @@
 import sympy as sp
 from sympy import collect
 from HeckeA import v, q, HeckeA
-from RB import beta_to_sigma, generate_all_sigma, is_decreasing_on_subset, right_action_rb, root_type_right, tilde_inverse_sigma, str_colored_partition, normalize_key, denormalize_key 
+from RB import beta_to_sigma, sigma_to_beta, generate_all_sigma, is_decreasing_on_subset, right_action_rb, root_type_right, tilde_inverse_sigma, str_colored_partition, normalize_key, denormalize_key 
 
 from perm import (
     generate_permutations,
@@ -159,22 +159,24 @@ class HeckeRB:
 
 
 
-    def T_wtilde(self, w, beta):
+
+    def T_wtilde(self, w, sigma):
         """
         Standard basis element T_{w~}.
         """
-        return {normalize_key(w, beta): sp.Integer(1)}
+        return {normalize_key(w, sigma): sp.Integer(1)}
 
-    def basis_element(self, w, beta):
-        return self.T_wtilde(w, beta)
+    def basis_element(self, w, sigma):
+        return self.T_wtilde(w, sigma)
 
 
-    def H_wtilde(self, w, beta):
+
+    def H_wtilde(self, w, sigma):
         """
         New basis element H_{w~} = (-v)^{-ell(w~)} T_{w~}.
         """
-        coeff = (-v) ** (-self.ell_wtilde(w, beta))
-        return {normalize_key(w, beta): sp.expand(coeff)}
+        coeff = (-v) ** (-self.ell_wtilde(normalize_key(w, sigma)))
+        return {normalize_key(w, sigma): sp.expand(coeff)}
 
     def T_to_H(self, element):
         """
@@ -676,38 +678,31 @@ class HeckeRB:
     # =========================================================================
     def is_in_Phi_i(self, key, i):
         """
-        Check if w̃ = (w, β) is in Φ_i.
+        Check if w̃ = (w, sigma) is in Φ_i.
         
-        From Lemma 8 of the paper:
-        (w, β) ∈ Φ_i iff w(i) > w(i+1) and β ∩ {i, i+1} ≠ {i}
+        Using the definition provided:
+        tilde w in the decent set of s_i if the root type for s_i 
+        under the right action is G, U+, or T+.
         """
-        w, beta = denormalize_key(key)
-        n = len(w)
-        if i < 1 or i >= n:
+        if i < 1 or i >= self.n:
             return False
         
-        # Check w(i) > w(i+1) (right descent)
-        if w[i-1] <= w[i]:
-            return False
-        
-        # Check β ∩ {i, i+1} ≠ {i}
-        inter = beta & {i, i + 1}
-        if inter == {i}:
-            return False
-        
-        return True
+        T, C = self._basis[key][i]
+        return T in ["G", "U+", "T+"]
 
     def wtilde_star_si(self, key, i):
         """
-        Compute w̃ * s_i = (w, β) * s_i.
+        Compute w̃ * s_i = (w, sigma) * s_i.
         
         This is the right action: (ws, s(β)) where s(β) = {s(j) : j ∈ β}.
+        We convert sigma to beta, apply the action, and convert back to sigma.
         """
-        w, beta = denormalize_key(key)
+        w, sigma = denormalize_key(key)
+        beta = sigma_to_beta(w, sigma)
         n = len(w)
         s = simple_reflection(i, n)
         ws = permutation_prod(w, s)
-        # s acts on β by swapping i and i+1
+        # s acts on β by swapping indices i and i+1
         s_beta = set()
         for j in beta:
             if j == i:
@@ -716,7 +711,10 @@ class HeckeRB:
                 s_beta.add(i)
             else:
                 s_beta.add(j)
-        return normalize_key(ws, s_beta)
+        
+        # Convert back to sigma
+        s_sigma = beta_to_sigma(ws, s_beta)
+        return normalize_key(ws, s_sigma)
 
     # =========================================================================
     # Kazhdan-Lusztig basis computation
@@ -858,6 +856,68 @@ class HeckeRB:
         # Return P_{y,x}
         return self._kl_table.get(w_key, {}).get(y_key, sp.Integer(0))
 
+    def compute_inverse_kl_polynomials(self, verbose=False):
+        """
+        Compute the inverse KL polynomials Q_{z,y} such that
+        sum_y Q_{z,y} P_{y,x} = delta_{z,x}.
+        
+        Since P is unipotent upper triangular (with respect to length),
+        we can compute Q inductively:
+        Q_{x,x} = 1
+        Q_{z,x} = - sum_{z <= y < x} Q_{z,y} P_{y,x} for z < x
+        """
+        if not hasattr(self, '_kl_table'):
+            self.compute_kl_polynomials(verbose=verbose)
+            
+        Q = {}
+        # Initialize diagonal
+        for x in self._basis:
+            Q[x] = {x: sp.Integer(1)}
+            
+        # Group by length to compute by induction on length gap
+        elements_by_length = self.elements_by_length
+        max_length = self.max_length
+        
+        # Induction on length gap k = ell(x) - ell(z)
+        for k in range(1, max_length + 1):
+            if verbose:
+                print(f"Computing inverse KL polynomials for length gap k={k}...")
+            for ell_x in range(k, max_length + 1):
+                ell_z = ell_x - k
+                if ell_z not in elements_by_length:
+                    continue
+                for x in elements_by_length.get(ell_x, []):
+                    for z in elements_by_length.get(ell_z, []):
+                        # We want Q_{z,x} = - sum_{z <= y < x} Q_{z,y} P_{y,x}
+                        # Since we iterate by length gap k, all Q_{z,y} for ell(y) < ell(x) are known.
+                        
+                        s = sp.Integer(0)
+                        # Iterate over y such that P_{y,x} is non-zero
+                        for y, p_yx in self._kl_table[x].items():
+                            if y == x:
+                                continue
+                            # Check if Q_{z,y} is already computed and non-zero
+                            q_zy = Q[y].get(z, sp.Integer(0))
+                            if q_zy != 0:
+                                s += q_zy * p_yx
+                                
+                        if s != 0:
+                            Q[x][z] = sp.expand(-s)
+                            
+        self._inverse_kl_table = Q
+        return Q
+
+    def inverse_kl_polynomial(self, z_key, y_key):
+        """
+        Get the inverse KL polynomial Q_{z,y} from the pre-computed table.
+        Satisfies sum_y Q_{z,y} P_{y,x} = delta_{z,x}.
+        """
+        if not hasattr(self, '_inverse_kl_table'):
+            self.compute_inverse_kl_polynomials()
+        
+        # Return Q_{z,y} = self._inverse_kl_table[y][z]
+        return self._inverse_kl_table.get(y_key, {}).get(z_key, sp.Integer(0))
+
     def compute_mu_coefficients(self):
         """
         Compute the mu coefficient μ(ỹ, w̃).
@@ -890,25 +950,20 @@ class HeckeRB:
                 
                 # Extract coefficient of v^{-1}
                 # This is the standard definition: μ(y,w) = coeff of v^{-1} in P_{y,w}
-                target_exp = -diff
-                target_exp = -1 
+                #target_exp = -diff
+                target_exp = -1
                 # Extract the coefficient of v**target_exp in the polynomial p
                 poly = sp.expand(p)
-                coeff_sum = sp.Integer(0)
-
-
-                # Extract coefficient of v^target_exp using Poly
-                p_poly = sp.Poly(poly, v)
-                coeff = p_poly.coeff_monomial(v**target_exp)
+                coeff = poly.coeff(v, target_exp)
                 if coeff != sp.Integer(0):
-                    self.mu[w_key][y_key] = coeff
+                    self.mu[w_key][y_key] = abs(coeff)
 
 
     def mu_coefficient(self, y_key, w_key):
         """
         Compute the mu coefficient μ(ỹ, w̃).
         
-        The mu coefficient is defined as the coefficient of v^{-(ℓ(w̃)-ℓ(ỹ))}
+        The mu coefficient is defined as the coefficient of v^{-1} 
         in the KL polynomial P_{ỹ,w̃}.
         
         For the W-graph, μ(ỹ, w̃) ≠ 0 implies an edge from ỹ to w̃.
@@ -922,7 +977,83 @@ class HeckeRB:
         
         # Return the mu coefficient from the precomputed table
         return self.mu.get(w_key, {}).get(y_key, sp.Integer(0))
+
+
+
+    def right_action_H_underline_simple(self, element, i):
+        """
+        Right action by H_underline_{s_i} = v^{-1} T_{s_i} + v^{-1} on an element in H-basis.
+        H_underline_{s_i} is the canonical basis element C'_{s_i}.
+        
+        Args:
+            element: dict mapping (w, beta) keys to coefficients (in H-basis)
+            i: index of simple reflection s_i
+            
+        Returns:
+            dict mapping (w, beta) keys to coefficients (in H-basis)
+        """
+        # Create H_underline_{s_i} = v^{-1} T_{s_i} + v^{-1} in T-basis
+        s = simple_reflection(i, self.n)
+        h_underline_si = {tuple(s): -v**(-1), tuple(range(1, self.n + 1)): -v**(-1)}
+        
+        # Apply right action by H_underline_{s_i} using right_action_hecke
+        result = self.right_action_hecke(element, h_underline_si)
+        
+        return result
+
+    def verify_proposition_9(self, w_key, i):
+        """
+        Verify Proposition 9 for a given basis element and simple reflection s_i.
+        
+        Proposition 9 states:
+        H_underline_w * H_underline_si = 
+            -(v^-1 + v) H_underline_w if w in Phi_i
+            H_underline_{w * si} + sum_{w' < w, w' in Phi_i} mu(w', w) H_underline_w' if w not in Phi_i
+        """
+        # 1. Left side: H_underline_w * H_underline_si
+
+        h_w = self.canonical_basis_element(w_key) # in H-basis
+        h_w_H = self.H_to_T(h_w)
+        #print(f"h_w_H: {h_w_H}")
+        lhs = self.right_action_H_underline_simple(h_w_H, i)
+        lhs = self.T_to_H(lhs)
+        
+        # 2. Right side
+        rhs = {}
+        if self.is_in_Phi_i(w_key, i):
+            # -(v^-1 + v) H_underline_w
+            factor = -(v**-1 + v)
+            for k, c in h_w.items():
+                rhs[k] = sp.expand(factor * c)
+        else:
+            # H_underline_{w * si} + sum_{w' < w, w' in Phi_i} mu(w', w) H_underline_w'
+            w_star_si = self.wtilde_star_si(w_key, i)
+            h_w_star = self.canonical_basis_element(w_star_si)
+            for k, c in h_w_star.items():
+                rhs[k] = rhs.get(k, sp.Integer(0)) + c
+            
+            # Mu terms
+            if not hasattr(self, 'mu'):
+                self.compute_mu_coefficients()
+            
+            # Sum over w' < w
+            for w_prime_key, mu_val in self.mu.get(w_key, {}).items():
+                if self.is_in_Phi_i(w_prime_key, i):
+                    h_w_prime = self.canonical_basis_element(w_prime_key)
+                    for k, c in h_w_prime.items():
+                        rhs[k] = rhs.get(k, sp.Integer(0)) + mu_val * c
+        
+        rhs = {k: sp.expand(c) for k, c in rhs.items() if sp.expand(c) != 0}
+        
+        # 3. Compare
+        equal = self.is_equal(lhs, rhs)
+        if not equal:
+            # Optional: print detailed difference if needed during debug
+            pass
+        return equal
     
+
+
 
     def print_mu_coefficients(self, max_pairs=None):
         """
@@ -977,7 +1108,7 @@ class HeckeRB:
         if not hasattr(self, '_kl_table'):
             self.compute_kl_polynomials()
         
-        # C_{w̃} = ∑_{ỹ <= w̃} P_{ỹ,w̃} T_{ỹ}
+        # C_{w̃} = ∑_{ỹ <= w̃} P_{ỹ,w̃} H_{ỹ}
         result = {}
         
         # Sum over all elements in KL[x]
