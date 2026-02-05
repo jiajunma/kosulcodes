@@ -210,6 +210,9 @@ class WGraphRB:
         v_to_id = {v_key: f"v{i}" for i, v_key in enumerate(self._vertices)}
         
         lines = [f'digraph WGraphRB_n{self.n} {{']
+        lines.append(f'    label="W-graph for n={self.n}, Double Cells: {len(self._double_cells)}";')
+        lines.append('    labelloc="t";')
+        lines.append('    fontsize=20;')
         lines.append('    rankdir=TB;')
         lines.append('    splines=line;')
         lines.append('    node [shape=box, fontname="Courier", style=filled];')

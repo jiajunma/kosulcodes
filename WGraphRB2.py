@@ -125,6 +125,9 @@ class WGraph2:
                 v_to_cell[v_key] = idx
 
         lines = ['digraph WGraph2 {']
+        lines.append(f'    label="W-graph 2 for n={self.n}, Double Cells: {len(self._double_cells)}";')
+        lines.append('    labelloc="t";')
+        lines.append('    fontsize=20;')
         lines.append('    rankdir=TB;')
         #lines.append('    splines=line;')
         lines.append('    node [shape=box, fontname="Courier", style=filled];')
