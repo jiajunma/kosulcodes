@@ -897,12 +897,59 @@ class HeckeRB:
         # Return P_{y,x}
         return self._kl_table.get(w_key, {}).get(y_key, sp.Integer(0))
 
+    def compute_mu_coefficients(self):
+        """
+        Compute the mu coefficient μ(ỹ, w̃).
+        
+        The mu coefficient is defined as the coefficient of v^{-(ℓ(w̃)-ℓ(ỹ))}
+        in the KL polynomial P_{ỹ,w̃}.
+        
+        For the W-graph, μ(ỹ, w̃) ≠ 0 implies an edge from ỹ to w̃.
+        
+        In the standard basis action:
+        H̃_{w̃} · H̃_s =  ∑_{ỹ: s ∈ τ(ỹ), s ∉ τ(w̃)} μ(ỹ, w̃) H̃_{ỹ} 
+        
+        Returns:
+            the dictionary of mu coefficients
+            self.mu[w̃][ỹ] := μ(ỹ, w̃)
+            here all coefficient in the dict must be non-zero
+        """
+        self.mu = {}
+        for w_key in self.basis():
+            self.mu[w_key] = {}
+            ell_w = self.ell_wtilde(w_key)
+            
+            for y_key in self.basis():
+                ell_y = self.ell_wtilde(y_key)
+                diff = ell_w - ell_y
+                
+                p = self.kl_polynomial(y_key, w_key)
+                if p == 0 or p == sp.Integer(0):
+                    continue
+                
+                # Extract coefficient of v^{-1}
+                # This is the standard definition: μ(y,w) = coeff of v^{-1} in P_{y,w}
+                target_exp = -diff
+                
+                p_expanded = sp.expand(p)
+                coeff = sp.Integer(0)
+                for term in sp.Add.make_args(p_expanded):
+                    powers = term.as_powers_dict()
+                    v_power = powers.get(v, 0)
+                    if v_power == target_exp:
+                        coeff += term / (v ** v_power)
+                
+                coeff = sp.expand(coeff)
+                if coeff != sp.Integer(0):
+                    self.mu[w_key][y_key] = coeff
+
+
     def mu_coefficient(self, y_key, w_key):
         """
         Compute the mu coefficient μ(ỹ, w̃).
         
-        The mu coefficient is defined as the coefficient of v^{-(ℓ(w̃)-ℓ(ỹ)-1)/2}
-        in the KL polynomial P_{ỹ,w̃}, when ℓ(w̃) - ℓ(ỹ) is odd.
+        The mu coefficient is defined as the coefficient of v^{-(ℓ(w̃)-ℓ(ỹ))}
+        in the KL polynomial P_{ỹ,w̃}.
         
         For the W-graph, μ(ỹ, w̃) ≠ 0 implies an edge from ỹ to w̃.
         
@@ -912,54 +959,59 @@ class HeckeRB:
         Returns:
             The mu coefficient (integer or 0)
         """
-        if y_key == w_key:
-            return sp.Integer(0)
+        # Ensure mu coefficients are computed
+        if not hasattr(self, 'mu'):
+            self.compute_mu_coefficients()
         
-        if not self.is_bruhat_leq(y_key, w_key):
-            return sp.Integer(0)
+        # Return the mu coefficient from the precomputed table
+        return self.mu.get(w_key, {}).get(y_key, sp.Integer(0))
+    
+
+    def print_mu_coefficients(self, max_pairs=None):
+        """
+        Print all non-zero mu coefficients.
         
-        ell_y = self.ell_wtilde(y_key)
-        ell_w = self.ell_wtilde(w_key)
+        Args:
+            max_pairs: Maximum number of pairs to print (None for all)
+        """
+        # Ensure mu coefficients are computed
+        if not hasattr(self, 'mu'):
+            self.compute_mu_coefficients()
         
-        diff = ell_w - ell_y
+        print(f"\nMu coefficients μ(ỹ, w̃) for the W-graph (non-zero only):")
+        print("="*70)
         
-        # mu is only non-zero when the length difference is odd
-        if diff % 2 == 0:
-            return sp.Integer(0)
+        # Collect all non-zero mu coefficients from the table
+        mu_pairs = []
+        for x_key in self.mu:
+            w_x, beta_x = denormalize_key(x_key)
+            for y_key in self.mu[x_key]:
+                mu_val = self.mu[x_key][y_key]
+                w_y, beta_y = denormalize_key(y_key)
+                mu_pairs.append((y_key, x_key, w_y, beta_y, w_x, beta_x, mu_val))
         
-        # For adjacent elements (diff = 1), mu = 1 if they're covers
-        if diff == 1:
-            # Check if y is covered by w (immediate predecessor)
-            covers = self.bruhat_covers(w_key)
-            if y_key in covers:
-                return sp.Integer(1)
-            return sp.Integer(0)
+        if len(mu_pairs) == 0:
+            print("  (all mu coefficients are 0)")
+            return
         
-        # For larger odd differences, mu comes from the KL polynomial
-        # mu = coefficient of v^{-(diff-1)/2} in P_{y,w}
-        p = self.kl_polynomial(y_key, w_key)
+        print(f"Total non-zero entries: {len(mu_pairs)}")
+        print()
         
-        if p == 0 or p == sp.Integer(0):
-            return sp.Integer(0)
+        pairs_to_show = mu_pairs if max_pairs is None else mu_pairs[:max_pairs]
         
-        # Extract the coefficient
-        # P is in v^{-1}Z[v^{-1}], so we look at the term with v^{-(diff-1)/2}
-        target_exp = -(diff - 1) // 2
+        for _, _, w_y, beta_y, w_x, beta_x, mu_val in pairs_to_show:
+            y_str = self._format_wtilde(w_y, beta_y)
+            x_str = self._format_wtilde(w_x, beta_x)
+            print(f"  μ({y_str}, {x_str}) = {mu_val}")
         
-        # Expand p as a polynomial in v
-        p_expanded = sp.Poly(p, v)
-        coeffs = p_expanded.as_dict()
-        
-        if (target_exp,) in coeffs:
-            return coeffs[(target_exp,)]
-        
-        return sp.Integer(0)
+        if max_pairs is not None and len(mu_pairs) > max_pairs:
+            print(f"  ... ({len(mu_pairs) - max_pairs} more pairs)")
 
     def canonical_basis_element(self, wtilde):
         """
         Compute the canonical (KL) basis element H̃_{w̃}.
         
-        C_{w̃} = ∑_{ỹ <=  w̃} P_{ỹ,w̃} T_{ỹ}
+        C_{w̃} = ∑_{ỹ <=  w̃} P_{ỹ,w̃} H_{ỹ}
         
         The element C_{w̃} is bar-invariant.
         """
@@ -1038,86 +1090,6 @@ class HeckeRB:
         return result
 
 
-    def compute_canonical_basis_iterative(self):
-        """
-        Compute the canonical basis using the iterative algorithm.
-        
-        For each w̃ in increasing length order:
-        1. Start with C_{w̃} = H_{w̃}
-        2. Add corrections from lower elements to make bar-invariant
-        
-        The canonical basis element H̃_{w̃} satisfies:
-        - H̃_{w̃} = H̃_{w̃} (bar-invariant)
-        - H̃_{w̃} = H_{w̃} + ∑_{ỹ < w̃} P_{w̃,ỹ} H_{ỹ} with P_{w̃,ỹ} ∈ v^{-1}Z[v^{-1}]
-        """
-        # Sort elements by length
-        elements_by_length = self.elements_by_length
-        
-        # Dictionary to store the canonical basis elements
-        # C_tilde[key] = {key2: coeff} representing H̃_{key}
-        C_tilde = {}
-        
-        # Also compute the inverse transformation: H in terms of H̃
-        # H_to_Htilde[key] = {key2: coeff} meaning H_{key} = ∑ coeff * H̃_{key2}
-        H_to_Htilde = {}
-        
-        # Process in order of increasing length
-        for ell in sorted(elements_by_length.keys()):
-            for key in elements_by_length[ell]:
-                w, beta = denormalize_key(key)
-                identity = tuple(range(1, self.n + 1))
-                
-                # Check if this is a special element: (id, {1,...,i})
-                is_special = False
-                if w == identity:
-                    beta_sorted = sorted(beta)
-                    if beta_sorted == list(range(1, len(beta) + 1)):
-                        is_special = True
-                        i = len(beta)
-                        # H̃_{w_i} = ∑_{j≤i} (-v)^{j-i} H_{w_j}
-                        C = {}
-                        for j in range(i + 1):
-                            key_j = self.special_element_key(j)
-                            C[key_j] = sp.expand((-v) ** (j - i))
-                        C_tilde[key] = self.regular_coefficient(C)
-                        
-                        # H_{w_i} = H̃_{w_i} + v^{-1} H̃_{w_{i-1}} (for i >= 1)
-                        H_to_Htilde[key] = {key: sp.Integer(1)}
-                        if i >= 1:
-                            key_prev = self.special_element_key(i - 1)
-                            H_to_Htilde[key][key_prev] = v ** (-1)
-                        continue
-                
-                # For non-special elements:
-                # The canonical basis element is H̃_{w̃} = H_{w̃} + ∑_{ỹ < w̃} P_{w̃,ỹ} H_{ỹ}
-                # where P_{w̃,ỹ} are the KL polynomials
-                
-                # Start with the leading term
-                C = {key: sp.Integer(1)}
-                
-                # Add corrections from lower elements using KL polynomials
-                lower = self.bruhat_lower_elements(key)
-                for y_key in lower:
-                    p = self.kl_polynomial(y_key, key)
-                    if p != 0 and p != sp.Integer(0):
-                        C[y_key] = C.get(y_key, sp.Integer(0)) + p
-                
-                C_tilde[key] = self.regular_coefficient(C)
-                
-                # For the inverse transformation, H_{w̃} = H̃_{w̃} - ∑ corrections
-                # This is computed by inverting the triangular transformation
-                H_to_Htilde[key] = {key: sp.Integer(1)}
-                for y_key in lower:
-                    p = self.kl_polynomial(y_key, key)
-                    if p != 0 and p != sp.Integer(0):
-                        # Negate the coefficient for the inverse
-                        H_to_Htilde[key][y_key] = H_to_Htilde[key].get(y_key, sp.Integer(0)) - p
-        
-        # Store for later use
-        self._C_tilde = C_tilde
-        self._H_to_Htilde = H_to_Htilde
-        
-        return C_tilde
 
     def print_basis_info(self):
         """Print information about the basis elements."""
