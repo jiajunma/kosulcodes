@@ -48,17 +48,6 @@ class WGraphRB:
             
         return self._tau_R, self._tau_L
 
-    def compute_edges(self):
-        if self._edges is not None:
-            return self._edges
-        
-        self.compute_cells() 
-        
-        self._edges = []
-        for (w, y), labels in self._action_edges_R.items():
-            label = ",".join(str(i) for i in sorted(labels))
-            self._edges.append((w, y, label))
-        return self._edges
     
     def compute_edges_right(self,w_key,label_key):
         """
@@ -67,6 +56,13 @@ class WGraphRB:
         """
         edges = []  
         for i in range(1, self.n):
+            # use i as the label for right action
+            # use -i as the label for left action
+            if w_key == label_key:
+                label = i
+            else:
+                label = -i 
+
             if self.hrb.is_in_Phi_i(w_key, i):
                 continue
             else:
@@ -79,30 +75,41 @@ class WGraphRB:
                     for companion_key in w_companions:
                         comp_root_type, _ = self.hrb._basis[companion_key][i]
                         if comp_root_type == 'T+':
-                            edges.append((label_key, companion_key, i))
+                            edges.append((label_key, companion_key, label))
                 else:
-                    edges.append((label_key, w_star_si, i))
+                    edges.append((label_key, w_star_si, label))
                 for w_prime_key, mu_val in self.hrb.mu.get(w_key, {}).items():
                     if self.hrb.is_in_Phi_i(w_prime_key, i):
-                        edges.append((label_key, w_prime_key, i)) 
+                        edges.append((label_key, w_prime_key, label)) 
         return edges
 
     def compute_edges(self):
-        if self._double_cells is not None:
-            return
+        if self._edges is not None:
+            return self._edges
         
         self.compute_descents()
-        all_edges = [] 
+        self._edges = {}  # Dictionary: (source, target) -> list of labels
         print(f"Computing preorder edges from action for n={self.n}...")
 
         for w_key in self._vertices:
-            redges = self.compute_edges_right(w_key,w_key)
-            all_edges.extend(redges)
+            redges = self.compute_edges_right(w_key, w_key)
+            for source, target, label in redges:
+                edge = (source, target)
+                if edge not in self._edges:
+                    self._edges[edge] = []
+                if label not in self._edges[edge]:
+                    self._edges[edge].append(label)
+            
             w_inv_key = normalize_key(*tilde_inverse_sigma(*w_key))  
-            ledges = self.compute_edges_right(w_inv_key,w_key)
-            all_edges.extend(ledges)
-        self._edges = all_edges 
-        return all_edges
+            ledges = self.compute_edges_right(w_inv_key, w_key)
+            for source, target, label in ledges:
+                edge = (source, target)
+                if edge not in self._edges:
+                    self._edges[edge] = []
+                if label not in self._edges[edge]:
+                    self._edges[edge].append(label)
+        
+        return self._edges
 
 
 
@@ -122,7 +129,7 @@ class WGraphRB:
         
         adj = defaultdict(set)
         
-        for source, target, _ in self._edges:
+        for (source, target), _ in self._edges.items():
             adj[source].add(target)
         
         # Tarjan's algorithm for strongly connected components
@@ -163,9 +170,27 @@ class WGraphRB:
         
         self._double_cells = sccs
 
-
+    def print_summary(self):
+        """Print a summary of the W-graph structure."""
+        print(f"\nW-graph summary for HeckeRB(n={self.n})")
+        print("="*70)
+        print(f"Total vertices: {len(self._vertices)}")
+        
+        self.compute_cell()
+        tau_R, tau_L = self.compute_descents()
+        
+        print(f"Double cells: {len(self._double_cells)}")
+        
+        for idx, cell in enumerate(self._double_cells, 1):
+            print(f"\nDouble Cell {idx} (size {len(cell)}):")
+            print("-"*50)
             
-
+            # Print elements with descents
+            for v_key in sorted(cell, key=lambda k: (self.hrb.ell_wtilde(k), k)):
+                v_str = self.hrb.format_element({v_key: 1}, use_H_basis=False)
+                dR = sorted(list(tau_R[v_key]))
+                dL = sorted(list(tau_L[v_key]))
+                print(f"    {v_str:20} | dL={dL}, dR={dR}")
 
     def generate_dot(self):
         """Generate DOT format string for the W-graph (right action)."""
@@ -178,11 +203,15 @@ class WGraphRB:
         # Mapping from vertex to cell IDs for coloring
         v_to_double = {}
         for idx, cell in enumerate(self._double_cells):
-            for v in cell:
-                v_to_double[v] = idx
+            for v_el in cell:
+                v_to_double[v_el] = idx
+        
+        # Precompute vertex IDs for performance
+        v_to_id = {v_key: f"v{i}" for i, v_key in enumerate(self._vertices)}
         
         lines = [f'digraph WGraphRB_n{self.n} {{']
         lines.append('    rankdir=TB;')
+        lines.append('    splines=line;')
         lines.append('    node [shape=box, fontname="Courier", style=filled];')
         lines.append('    edge [fontname="Courier"];')
         
@@ -207,26 +236,39 @@ class WGraphRB:
             lines.append('        rank=same;')
             lines.append(f'        label="ell={ell}"; style=dashed;')
             for v_key in length_groups[ell]:
-                v_id = f"v{self._vertices.index(v_key)}"
-                # Use format_element but remove ANSI codes for DOT
-                label = self.hrb.format_element({v_key: 1}, use_H_basis=False)
-                # Simple cleanup of ANSI codes if they exist
-                label = re.sub(r'\033\[[0-9;]*m', '', label)
+                v_id = v_to_id[v_key]
+                
+                # Format the label with colored permutation using HTML-like labels in DOT
+                w, sigma = denormalize_key(v_key)
+                ell = self.hrb.ell_wtilde(v_key)
+                
+                # Format w with colored digits for DOT HTML labels
+                # Elements at positions in sigma are red, others are blue
+                colored_w_parts = []
+                for i in range(1, self.n + 1):
+                    val = w[i-1]
+                    color = "red" if i in sigma else "blue"
+                    colored_w_parts.append(f'<font color="{color}">{val}</font>')
+                colored_w_str = "".join(colored_w_parts)
+                
+                label = f"[{colored_w_str}]"
                 
                 dR = sorted(list(tau_R[v_key]))
                 dL = sorted(list(tau_L[v_key]))
-                label += f"\\nL:{dL} R:{dR}"
+                label += f"<br/><font point-size='10'>L:{dL} R:{dR}</font>"
                 
                 # Assign color based on double cell membership
                 double_idx = v_to_double.get(v_key, 0)
                 color = colors[double_idx % len(colors)]
-                lines.append(f'        {v_id} [label="{label}", fillcolor="{color}"];')
+                # Use label=<> for HTML-like labels in DOT
+                lines.append(f'        {v_id} [label=<{label}>, fillcolor="{color}"];')
             lines.append('    }')
             
-        for y_key, w_key, label in self._edges:
-            y_id = f"v{self._vertices.index(y_key)}"
-            w_id = f"v{self._vertices.index(w_key)}"
-            lines.append(f'    {y_id} -> {w_id} [label="{label}"];')
+        for (y_key, w_key), labels in self._edges.items():
+            y_id = v_to_id[y_key]
+            w_id = v_to_id[w_key]
+            label_str = ",".join(str(lbl) for lbl in sorted(labels))
+            lines.append(f'    {y_id} -> {w_id} [label="{label_str}"];')
             
         lines.append('}')
         return "\n".join(lines)
