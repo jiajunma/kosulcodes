@@ -383,7 +383,7 @@ class HeckeRB:
            bar(T_{w_i}) = v^{-2i} T_{w_i} + ∑_{j<i} (v^{-2i} - v^{-2i+2}) T_{w_j}
         3. Iterate over length from 0 to maximal:
            - For each w̃ of length ℓ, compute T_{w̃} · T_s for all simple s
-           - Find w̃'' with ℓ(w̃'') > ℓ(w̃) and coefficient ±1
+           - Find w̃'' with ℓ(w̃'') > ℓ(w̃) and coefficient 1
            - Compute: bar(T_{w̃''}) = bar(T_{w̃}) · bar(T_s) - ∑_{w̃'≠w̃''} bar(a) bar(T_{w̃'})
         4. Verify all elements are reached
         
@@ -761,7 +761,7 @@ class HeckeRB:
     # Kazhdan-Lusztig basis computation
     # =========================================================================
     def compute_kl_polynomials(self, verbose=False):
-        """
+        f"""
         Compute all KL polynomials P_{y,x} using the inductive algorithm.
         
         Algorithm (following Lusztig's Lemma 24.2.1):
@@ -773,7 +773,7 @@ class HeckeRB:
              b) P_{y,x} = negative-power part of q_{y,x}
         
         Returns:
-            dict: KL[x][y] = P_{y,x} as a polynomial in v
+            dict: KL[x][y] = P_{y,x} as a polynomial in v^{-1}
         """
         # Ensure bar_table is computed
         if not hasattr(self, 'bar_table'):
