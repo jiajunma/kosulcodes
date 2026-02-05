@@ -52,51 +52,102 @@ class WGraph2:
                     self._edges[edge].add(i)
                 
 
+    def compute_cell(self):
+        """
+        Compute double cells (strongly connected components) from the edges.
+        """
+        if not self._edges:
+            self.compute_edges()
+        
+        from collections import defaultdict
+        adj = defaultdict(set)
+        for (source, target) in self._edges:
+            adj[source].add(target)
+        
+        index_counter = [0]
+        stack = []
+        lowlinks = {}
+        index = {}
+        on_stack = defaultdict(bool)
+        sccs = []
+        
+        def strongconnect(v):
+            index[v] = index_counter[0]
+            lowlinks[v] = index_counter[0]
+            index_counter[0] += 1
+            stack.append(v)
+            on_stack[v] = True
+            
+            for w in adj[v]:
+                if w not in index:
+                    strongconnect(w)
+                    lowlinks[v] = min(lowlinks[v], lowlinks[w])
+                elif on_stack[w]:
+                    lowlinks[v] = min(lowlinks[v], index[w])
+            
+            if lowlinks[v] == index[v]:
+                component = []
+                while True:
+                    w = stack.pop()
+                    on_stack[w] = False
+                    component.append(w)
+                    if w == v:
+                        break
+                sccs.append(frozenset(component))
+        
+        for v in self._vertices:
+            if v not in index:
+                strongconnect(v)
+        
+        self._double_cells = sccs
+        return sccs
+
     def generate_dot(self):
         """Generate DOT format string for the W-graph."""
         self.compute_edges()
+        self.compute_cell()
         
         v_to_id = {v_key: f"v{idx}" for idx, v_key in enumerate(self._vertices)}
-        
+        v_to_cell = {}
+        for idx, cell in enumerate(self._double_cells):
+            for v_key in cell:
+                v_to_cell[v_key] = idx
+
         lines = ['digraph WGraph2 {']
         lines.append('    rankdir=TB;')
         #lines.append('    splines=line;')
-        lines.append('    node [shape=box, fontname="Courier", style=filled, fillcolor="#F5F5F5"];')
+        lines.append('    node [shape=box, fontname="Courier", style=filled];')
         lines.append('    edge [fontname="Courier", fontsize=10];')
         
-        # Group by length for better layout
-        length_groups = {}
+        colors = [
+            "#FFB6C1", "#87CEEB", "#98FB98", "#FFD700", "#FFA07A", 
+            "#DDA0DD", "#F0E68C", "#B0E0E6", "#FFE4B5", "#D8BFD8",
+            "#FFDAB9", "#E0BBE4", "#C7CEEA", "#FFDFD3", "#B2E2F2",
+            "#FFCCF9", "#C9E4CA", "#FFF4E6", "#D5AAFF", "#AED9E0"
+        ]
+
         for v_key in self._vertices:
+            v_id = v_to_id[v_key]
+            w, sigma = denormalize_key(v_key)
             ell = self.hrb.ell_wtilde(v_key)
-            if ell not in length_groups:
-                length_groups[ell] = []
-            length_groups[ell].append(v_key)
             
-        for ell in sorted(length_groups.keys()):
-            lines.append(f'    subgraph cluster_ell{ell} {{')
-            lines.append('        rank=same;')
-            lines.append(f'        label="ell={ell}"; style=dashed; color=gray;')
-            for v_key in length_groups[ell]:
-                v_id = v_to_id[v_key]
-                w, sigma = denormalize_key(v_key)
-                
-                # Colored permutation digits
-                colored_w_parts = []
-                for i in range(1, self.n + 1):
-                    val = w[i-1]
-                    color = "red" if i in sigma else "blue"
-                    colored_w_parts.append(f'<font color="{color}">{val}</font>')
-                colored_w_str = "".join(colored_w_parts)
-                
-                label = f"[{colored_w_str}]"
-                lines.append(f'        {v_id} [label=<{label}>];')
-            lines.append('    }')
+            # Colored permutation digits
+            colored_w_parts = []
+            for i in range(1, self.n + 1):
+                val = w[i-1]
+                color = "red" if i in sigma else "blue"
+                colored_w_parts.append(f'<font color="{color}">{val}</font>')
+            colored_w_str = "".join(colored_w_parts)
+            
+            label = f"[{colored_w_str}]<sub>{ell}</sub>"
+            cell_idx = v_to_cell.get(v_key, 0)
+            color = colors[cell_idx % len(colors)]
+            lines.append(f'    {v_id} [label=<{label}>, fillcolor="{color}"];')
             
         # Draw edges
         for (w_key, y_key), indices in self._edges.items():
             w_id = v_to_id[w_key]
             y_id = v_to_id[y_key]
-            label_str = ",".join(str(i) for i in sorted(list(indices)))
             label_str = ""
             lines.append(f'    {w_id} -> {y_id} [label="{label_str}"];')
             
