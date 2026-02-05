@@ -28,11 +28,13 @@ def test_prop9(n):
             # The right side is also computed in canonical basis basis 
             if hrb.is_in_Phi_i(w_key, i):
                rhs[w_key] = -(v**(-1) + v**(1)) 
+
             else:
                 w_star_si = hrb.wtilde_star_si(w_key, i)
                 rhs[w_star_si] = sp.Integer(1) 
                 for w_prime_key, mu_val in hrb.mu.get(w_key, {}).items():
-                    rhs[w_prime_key] = mu_val 
+                    if hrb.is_in_Phi_i(w_prime_key, i):
+                        rhs[w_prime_key] = mu_val 
                 
             rhs_c = {k: sp.expand(c) for k, c in rhs.items() if sp.expand(c) != 0}
             
