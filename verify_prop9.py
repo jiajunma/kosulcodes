@@ -17,7 +17,6 @@ def test_prop9(n):
     total_passed = 0
     
     for w_key in hrb.basis():
-        w, sigma = denormalize_key(w_key)
         for i in range(1, n):
             h_w = hrb.canonical_basis_element(w_key)
             lhs = hrb.right_action_H_underline_simple(h_w, i)
@@ -72,8 +71,16 @@ def test_prop9(n):
                 
     print(f"Proposition 9 Passed for  {total_passed}/{total_checked}")
 
+
 if __name__ == "__main__":
+    import time
     n = 3
     if len(sys.argv) > 1:
         n = int(sys.argv[1])
+    
+    start_time = time.time()
     test_prop9(n)
+    end_time = time.time()
+    
+    elapsed_time = end_time - start_time
+    print(f"\nTotal execution time: {elapsed_time:.2f} seconds")
