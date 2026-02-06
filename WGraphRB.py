@@ -83,6 +83,38 @@ class WGraphRB:
                         edges.append((label_key, w_prime_key, label)) 
         return edges
 
+    def compute_edges_left(self, w_key, label_key):
+        """
+        Compute the edge for left action using the anti-involution tau.
+        then draw the terms from label_key to the target nodes. 
+        """
+        w_tau_key = self._tau_map[w_key]
+        edges = []
+        for i in range(1, self.n):
+            label = i 
+
+            if self.hrb.is_in_Phi_i(w_tau_key, i):
+                continue
+            else:
+                # Left action corresponds to right action on the tau-image
+                target_tau = self.hrb.wtilde_star_si(w_tau_key, i)
+                w_tau_root_type, w_tau_companions = self.hrb._basis[w_tau_key][i]
+                target_tau_root_type, _ = self.hrb._basis[target_tau][i]
+                
+                if w_tau_root_type == 'T-' and target_tau_root_type == 'T-':
+                    for companion_key in w_tau_companions:
+                        comp_root_type, _ = self.hrb._basis[companion_key][i]
+                        if comp_root_type == 'T+':
+                            edges.append((label_key, self._tau_map[companion_key], label))
+                else:
+                    edges.append((label_key, self._tau_map[target_tau], label))
+                
+                # mu terms from right action on tau-image
+                for w_prime_tau_key, mu_val in self.hrb.mu.get(w_tau_key, {}).items():
+                    if self.hrb.is_in_Phi_i(w_prime_tau_key, i):
+                        edges.append((label_key, self._tau_map[w_prime_tau_key], label))
+        return edges
+
     def compute_edges(self):
         if self._edges is not None:
             return self._edges
@@ -100,8 +132,7 @@ class WGraphRB:
                 if label not in self._edges[edge]:
                     self._edges[edge].append(label)
             
-            w_inv_key = normalize_key(*tilde_inverse_sigma(*w_key))  
-            ledges = self.compute_edges_right(w_inv_key, w_key)
+            ledges = self.compute_edges_left(w_key, w_key)
             for source, target, label in ledges:
                 edge = (source, target)
                 if edge not in self._edges:

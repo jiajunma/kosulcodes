@@ -14,6 +14,38 @@ class WGraph2:
         self.hrb.compute_inverse_kl_polynomials()
         self._vertices = list(self.hrb.basis())
         self._edges = {}  # (source_key, target_key) -> set of reflection indices
+        self._tau_R = None
+        self._tau_L = None
+        self._tau_map = {}
+        for v_key in self._vertices:
+            w, sigma = denormalize_key(v_key)
+            w_inv, sigma_inv = tilde_inverse_sigma(w, sigma)
+            self._tau_map[v_key] = normalize_key(w_inv, sigma_inv)
+
+    def compute_descents(self):
+        if self._tau_R is not None:
+            return self._tau_R, self._tau_L
+        
+        self._tau_R = {}
+        self._tau_L = {}
+        
+        for v_key in self._vertices:
+            # Right descents
+            dR = set()
+            for i in range(1, self.n):
+                if self.hrb.is_in_Phi_i(v_key, i):
+                    dR.add(i)
+            self._tau_R[v_key] = dR
+            
+            # Left descents: i in tau_L(v) iff i in tau_R(tau(v))
+            v_tau_key = self._tau_map[v_key]
+            dL = set()
+            for i in range(1, self.n):
+                if self.hrb.is_in_Phi_i(v_tau_key, i):
+                    dL.add(i)
+            self._tau_L[v_key] = dL
+            
+        return self._tau_R, self._tau_L
 
     def compute_edges(self):
         """
@@ -23,21 +55,20 @@ class WGraph2:
         for w_key in self._vertices:
             # Get canonical basis element C_w in H-basis
             c_w = self.hrb.canonical_basis_element(w_key)
-            w_inv_key = normalize_key(*tilde_inverse_sigma(*w_key))
-            c_w_inv = self.hrb.canonical_basis_element(w_inv_key)
 
             for i in range(1, self.n):
+                # Right action: C_w * H_i
                 # Compute C_w * C_si (H_underline_si) in H-basis
-                lhs_h = self.hrb.right_action_H_underline_simple(c_w, i)
+                lhs_h_right = self.hrb.right_action_H_underline_simple(c_w, i)
                 # Convert result to C-basis
-                lhs_c = self.hrb.H_to_C(lhs_h)
+                lhs_c_right = self.hrb.H_to_C(lhs_h_right)
                 
                 # Format and print the results
                 w_str = self.hrb.format_element({w_key: 1}, use_C_basis=True)
-                print(f"{w_str} * H_{i} = {self.hrb.format_element(lhs_c, use_C_basis=True)}")
+                print(f"{w_str} * H_{i} = {self.hrb.format_element(lhs_c_right, use_C_basis=True)}")
 
                 # For each C_y that appears in the expansion
-                for y_key, coeff in lhs_c.items():
+                for y_key, coeff in lhs_c_right.items():
                     if sp.expand(coeff) == 0  or w_key == y_key:
                         continue
                     edge = (w_key, y_key)
@@ -45,16 +76,15 @@ class WGraph2:
                         self._edges[edge] = set()
                     self._edges[edge].add(i)
 
-                lhs_h_inv = self.hrb.right_action_H_underline_simple(c_w_inv, i)
+                # Left action: H_i * C_w
+                lhs_h_left = self.hrb.left_action_H_underline_simple(c_w, i)
                 # Convert result to C-basis
-                lhs_c_inv = self.hrb.H_to_C(lhs_h_inv)
+                lhs_c_left = self.hrb.H_to_C(lhs_h_left)
                 
-                w_inv_str = self.hrb.format_element({w_inv_key: 1}, use_C_basis=True)
-                print(f"{w_inv_str} * H_{i} = {self.hrb.format_element(lhs_c_inv, use_C_basis=True)}")
+                print(f"H_{i} * {w_str}  = {self.hrb.format_element(lhs_c_left, use_C_basis=True)}")
 
                 # For each C_y that appears in the expansion
-                for y_inv_key, coeff in lhs_c_inv.items():
-                    y_key = normalize_key(*tilde_inverse_sigma(*y_inv_key))
+                for y_key, coeff in lhs_c_left.items():
                     if sp.expand(coeff) == 0  or w_key == y_key:
                         continue
                     edge = (w_key, y_key)
@@ -117,6 +147,7 @@ class WGraph2:
         """Generate DOT format string for the W-graph."""
         self.compute_edges()
         self.compute_cell()
+        tau_R, tau_L = self.compute_descents()
         
         v_to_id = {v_key: f"v{idx}" for idx, v_key in enumerate(self._vertices)}
         v_to_cell = {}
@@ -153,7 +184,12 @@ class WGraph2:
                 colored_w_parts.append(f'<font color="{color}">{val}</font>')
             colored_w_str = "".join(colored_w_parts)
             
-            label = f"[{colored_w_str}]<sub>{ell}</sub>"
+            label = f"[{colored_w_str}]{ell}"
+            
+            dR = sorted(list(tau_R[v_key]))
+            dL = sorted(list(tau_L[v_key]))
+            label += f"<br/><font point-size='10'>L:{dL} R:{dR}</font>"
+            
             cell_idx = v_to_cell.get(v_key, 0)
             color = colors[cell_idx % len(colors)]
             lines.append(f'    {v_id} [label=<{label}>, fillcolor="{color}"];')

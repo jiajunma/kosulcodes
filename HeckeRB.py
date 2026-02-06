@@ -1004,6 +1004,29 @@ class HeckeRB:
         return result
 
 
+    def left_action_H_underline_simple(self, element, i):
+        """
+        Left action by H_underline_{s_i} on an element in H-basis.
+        
+        Args:
+            element: dict mapping (w, beta) keys to coefficients (in H-basis)
+            i: index of simple reflection s_i
+            
+        Returns:
+            dict mapping (w, beta) keys to coefficients (in H-basis)
+        """
+        # Create H_underline_{s_i} = -v^{-1} T_{s_i} -v^{-1} in T-basis
+        s = simple_reflection(i, self.n)
+        h_underline_si = {tuple(s): -v**(-1), tuple(range(1, self.n + 1)): -v**(-1)}
+        
+        # Apply left action by H_underline_{s_i} using left_action_hecke
+        element_t = self.H_to_T(element)
+        result = self.left_action_hecke(element_t, h_underline_si)
+        result = self.T_to_H(result)
+        
+        return result
+
+
     def H_to_C(self, element):
         """
         Convert an element from H-basis to C-basis.
