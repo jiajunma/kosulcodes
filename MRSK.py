@@ -144,6 +144,54 @@ def generate_all_w_beta_pairs(n):
             yield w, beta
 
 
+def count_microlocal_packets(n, verbose=1):
+    """
+    Count microlocal packets by grouping (w, beta) pairs by their (nu, theta, nu') output.
+    
+    A microlocal packet is the collection of all (w, beta) pairs that map to the same
+    (nu, theta, nu') triple under the Mirabolic RSK algorithm.
+    
+    Args:
+        n: size of permutations
+        verbose: output level
+            0 - only summary statistics
+            1 - print each packet with count
+            2 - print each packet with all (w, beta) pairs
+    
+    Returns:
+        dict: mapping from (nu, theta, nu') to list of (w, beta) pairs
+    """
+    packets = {}
+    
+    for w, beta in generate_all_w_beta_pairs(n):
+        result = mirabolic_rsk(w, beta)
+        # Create a hashable key from the shapes
+        key = (tuple(result["nu"]), tuple(result["theta"]), tuple(result["nu'"]))
+        
+        if key not in packets:
+            packets[key] = []
+        packets[key].append((w, beta))
+    
+    # Print results based on verbosity
+    if verbose >= 1:
+        print(f"Microlocal packets for n={n}:")
+        print(f"Total number of packets: {len(packets)}")
+        print(f"Total (w,beta) pairs: {sum(len(v) for v in packets.values())}")
+        print("=" * 60)
+
+        if verbose >= 2: 
+         for key, pairs in sorted(packets.items(), key=lambda x: len(x[1]), reverse=True):
+            nu, theta, nu_prime = key
+            print(f"\nPacket: nu={list(nu)}, theta={list(theta)}, nu'={list(nu_prime)}")
+            print(f"  Size: {len(pairs)}")
+            
+            print("  Members:")
+            for w, beta in pairs:
+                print(f"    {str_colored_partition(w, beta)}")
+    
+    return packets
+
+
 def test_all_rb(n, verbose=1):
     count = 0
     for w, beta in generate_all_w_beta_pairs(n):
@@ -169,10 +217,17 @@ if __name__ == "__main__":
         raise SystemExit(
             "Usage:\n"
             "  python MRSK.py <n> [verbose]\n"
+            "  python MRSK.py count <n> [verbose]\n"
             "  python MRSK.py wbeta \"(w1,w2,...)\" \"{i,j,...}\"\n"
             "  python MRSK.py wsigma \"(w1,w2,...)\" \"{i,j,...}\""
         )
-    if sys.argv[1] == "wbeta":
+    if sys.argv[1] == "count":
+        if len(sys.argv) < 3:
+            raise SystemExit("Usage: python MRSK.py count <n> [verbose]")
+        n = int(sys.argv[2])
+        verbose = int(sys.argv[3]) if len(sys.argv) > 3 else 1
+        count_microlocal_packets(n, verbose)
+    elif sys.argv[1] == "wbeta":
         if len(sys.argv) != 4:
             raise SystemExit("Usage: python MRSK.py wbeta \"(w1,w2,...)\" \"{i,j,...}\"")
         w = eval(sys.argv[2], {"__builtins__": {}})
@@ -189,6 +244,7 @@ if __name__ == "__main__":
         print_tableau(result["T_at"], label="T_at:")
         print_tableau(result["T1"], label="T1:")
         print_tableau(result["T2"], label="T2:")
+
     elif sys.argv[1] == "wsigma":
         if len(sys.argv) != 4:
             raise SystemExit("Usage: python MRSK.py wsigma \"(w1,w2,...)\" \"{i,j,...}\"")

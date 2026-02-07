@@ -232,6 +232,23 @@ class WGraph2:
         except FileNotFoundError:
             print("Graphviz 'dot' command not found. Please install Graphviz.")
 
+    def save_pdf(self, filename):
+        """Save the W-graph as a PDF file."""
+        dot_str = self.generate_dot()
+        try:
+            process = subprocess.Popen(['dot', '-Tpdf', '-o', filename], 
+                                     stdin=subprocess.PIPE, 
+                                     stdout=subprocess.PIPE, 
+                                     stderr=subprocess.PIPE, 
+                                     text=True)
+            stdout, stderr = process.communicate(input=dot_str)
+            if process.returncode == 0:
+                print(f"PDF saved to {filename}")
+            else:
+                print(f"Error generating PDF: {stderr}")
+        except FileNotFoundError:
+            print("Graphviz 'dot' command not found. Please install Graphviz.")
+
 if __name__ == "__main__":
     n = 2
     filename = "WGraph2.svg"
@@ -244,4 +261,9 @@ if __name__ == "__main__":
         filename = sys.argv[2]
         
     wg = WGraph2(n)
-    wg.save_svg(filename)
+    
+    # Determine output format based on file extension
+    if filename.lower().endswith('.pdf'):
+        wg.save_pdf(filename)
+    else:
+        wg.save_svg(filename)
