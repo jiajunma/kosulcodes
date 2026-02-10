@@ -235,20 +235,25 @@ class WGraphBessel3:
 
 
 if __name__ == "__main__":
-    n = 2
-    filename = "WGraphBessel3.svg"
-    if len(sys.argv) > 1:
-        try:
-            n = int(sys.argv[1])
-        except ValueError:
-            pass
-    if len(sys.argv) > 2:
-        filename = sys.argv[2]
+    import argparse
 
-    wg = WGraphBessel3(n)
+    parser = argparse.ArgumentParser(
+        description="Generate the Bessel W-graph (type 3, DOT via Graphviz)."
+    )
+    parser.add_argument("-n", type=int, default=2, help="Size parameter n")
+    parser.add_argument(
+        "-o",
+        "--output",
+        default=None,
+        help="Output filename (.svg or .pdf). Default: WGraphBessel3.svg",
+    )
+    args = parser.parse_args()
+
+    filename = args.output or "WGraphBessel3.svg"
+    wg = WGraphBessel3(args.n)
     wg.compute_cell()
 
-    if filename.lower().endswith('.pdf'):
+    if filename.lower().endswith(".pdf"):
         wg.save_pdf(filename)
     else:
         wg.save_svg(filename)
