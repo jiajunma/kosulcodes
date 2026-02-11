@@ -169,12 +169,12 @@ def descent_set_pm(pm,m,n):
     for i in range(1, m):
         val_i = pm_dict.get(i, 0)
         val_ip1 = pm_dict.get(i + 1, 0)
-        if val_i <= val_ip1:
+        if val_i >= val_ip1:
             DescentL.append(i)
     for i in range(1, n):
         val_i = inv_pm_dict.get(i, 0)
         val_ip1 = inv_pm_dict.get(i + 1, 0)
-        if val_i <= val_ip1:
+        if val_i >= val_ip1:
             DescentR.append(i)
     return DescentL, DescentR
 
