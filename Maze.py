@@ -1046,12 +1046,7 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.check_bijection:
-        if args.n is None:
-            parser.error("--check-bijection requires -n")
-        from matching_tau import count_RB_to_rook_board_bijection
-        count_RB_to_rook_board_bijection(args.n, verbose=True)
-    elif args.w:
+    if args.w:
         w = _parse_int_list(args.w)
         if not w:
             raise ValueError("w must be non-empty")
