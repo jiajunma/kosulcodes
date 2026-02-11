@@ -154,6 +154,30 @@ def get_all_types_companions(pm, m, n):
         result['right'][i] = get_type_companion(pm, 'right', i)
     return result
 
+
+def descent_set_pm(pm,m,n):
+    """
+    Compute the descent set of a partial matching.
+    
+    The formula is:
+    descent_set(pm) = {i : i in [1,m] and there exists j in [1,n] such that (i,j) in pm and j < i}
+    """
+    DescentL = [] 
+    DescentR = []
+    pm_dict = dict(pm)
+    inv_pm_dict = {j: k for k, j in pm}
+    for i in range(1, m):
+        val_i = pm_dict.get(i, 0)
+        val_ip1 = pm_dict.get(i + 1, 0)
+        if val_i <= val_ip1:
+            DescentL.append(i)
+    for i in range(1, n):
+        val_i = inv_pm_dict.get(i, 0)
+        val_ip1 = inv_pm_dict.get(i + 1, 0)
+        if val_i <= val_ip1:
+            DescentR.append(i)
+    return DescentL, DescentR
+
 def ell_pm(pm,m,n):
     """
     Compute the dimension of the orbit of determined by a partial matching.
@@ -178,7 +202,42 @@ def ell_pm(pm,m,n):
 
     return dim_sum - increasing_pairs
 
+def action_pm_left(pm, w):
+    """
+    We use the list notation of a permutation w.
+    left action of w on pm
+    where w in a permutation of {1, ..., m}
+    the result is a new partial matching pm'
+    """
+    result = frozenset((w[i-1], j) for i, j in pm)
+    return result
 
+def action_pm_right(pm, w):
+    """
+    Right action of w on pm
+    where w is a permutation of {1, ..., n} (given as a list of length n)
+    The result is a new partial matching pm':
+    if pm = {(i_k, j_k)}
+    the result is {(i_k, w^{-1}(j_k))}
+
+    Args:
+        pm: an iterable of pairs (i, j)
+        w: a permutation list of length n
+
+    Returns:
+        A frozenset representing the right action, i.e., {(i_k, w^{-1}(j_k))}
+    """
+    n = len(w)
+    # Build value_to_index mapping: w[j-1] = value, so value_to_index[value] = j
+    value_to_index = {value: idx + 1 for idx, value in enumerate(w)}
+    result = frozenset((i, value_to_index[j]) for (i, j) in pm)
+    return result
+
+def longest_element(m):
+    """
+    Return the longest element in the symmetric group S_m.
+    """
+    return tuple(range(m, 0, -1))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
