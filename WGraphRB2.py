@@ -2,8 +2,9 @@ import sys
 import subprocess
 import re
 from HeckeRB import HeckeRB, denormalize_key, normalize_key
-from RB import tilde_inverse_sigma
+from RB import tilde_inverse_sigma, beta_to_sigma, sigma_to_beta, str_colored_partition
 import sympy as sp
+from Maze import  RB_to_R, str_R
 
 class WGraph2:
     def __init__(self, n):
@@ -142,9 +143,26 @@ class WGraph2:
         
         self._double_cells = sccs
         return sccs
+    
 
     def generate_dot(self):
         """Generate DOT format string for the W-graph."""
+
+        def str_rook_board(rb): 
+            """
+            Return a DOT/HTML two-line notation string for a rook board rb.
+            Suppose rb = {(1,2),(2,3),(4,5)} then output is 
+            (124)
+            (235)
+            """
+            if not rb:
+                return "()<br/>()"
+            pairs = sorted(rb, key=lambda pair: pair[0])
+            first_line = "".join(str(i) for i, _ in pairs)
+            second_line = "".join(str(j) for _, j in pairs)
+            return f"({first_line})<br/>({second_line})"
+
+
         self.compute_edges()
         self.compute_cell()
         tau_R, tau_L = self.compute_descents()
@@ -171,6 +189,7 @@ class WGraph2:
             "#FFCCF9", "#C9E4CA", "#FFF4E6", "#D5AAFF", "#AED9E0"
         ]
 
+        self._rook_boards = set() 
         for v_key in self._vertices:
             v_id = v_to_id[v_key]
             w, sigma = denormalize_key(v_key)
@@ -189,6 +208,15 @@ class WGraph2:
             dR = sorted(list(tau_R[v_key]))
             dL = sorted(list(tau_L[v_key]))
             label += f"<br/><font point-size='10'>L:{dL} R:{dR}</font>"
+            beta= sigma_to_beta(*v_key)
+            rook_board = RB_to_R(v_key[0],beta)
+            if frozenset(rook_board) not in self._rook_boards:
+                self._rook_boards.add(frozenset(rook_board))
+            else:
+                print(f"v_key: {str_colored_partition(*v_key)}")
+                print(f"Error: Rook board {rook_board} already exists")
+
+            label += f"<br/><font point-size='10'>{str_rook_board(rook_board)}</font>"
             
             cell_idx = v_to_cell.get(v_key, 0)
             color = colors[cell_idx % len(colors)]
@@ -214,6 +242,7 @@ class WGraph2:
             processed_edges.add((w_key, y_key))
             
         lines.append('}')
+        assert len(self._rook_boards) == len(self._vertices),f"Error: Number of rook boards does not match number of vertices {len(self._rook_boards)} != {len(self._vertices)}"
         return "\n".join(lines)
 
     def save_svg(self, filename):

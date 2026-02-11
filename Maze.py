@@ -909,10 +909,11 @@ def print_all_R(m, n):
             w,beta = maze_to_RB(maze)
             sigma = beta_to_sigma(w,beta)
             maze2 = RB_to_maze(w,beta,m,n)
+            rook_board2 = RB_to_R(w,beta)
 
             print(f"{str_colored_partition(w,beta)}")
             print(f"{str_colored_partition(w,sigma)}")
-            if maze2 == maze : 
+            if maze2 == maze and frozenset(rook_board2) == frozenset(rook_board): 
                 print("✓")
             else:
                 maze_to_RB_test += 1
@@ -937,27 +938,165 @@ def print_all_R(m, n):
         print(f"✓ maze_to_RB test: PASSED")
     return count
 
+def str_R(rook_board):
+    """
+    Convert a rook board to a string representation.
+    The output is in two lines convention. 
+    If rook_board = {(1,2),(3,4),(5,6)}, the output is:
+    (1 3 5) 
+    (2 4 6)
+    """
+    if not rook_board:
+        return "()\n()"
+
+    sorted_pairs = sorted(rook_board, key=lambda pair: pair[0])
+    first_line = " ".join(str(i) for i, _ in sorted_pairs)
+    second_line = " ".join(str(j) for _, j in sorted_pairs)
+    return f"({first_line})\n({second_line})"
+
+
+def RB_to_R(w,beta):
+    """
+    Convert a red-blue permutation to a rook board of size n.
+    This is [FGT Lemma 4.2.7]: RB --> maze --> R
+    """
+    n = len(w)
+    maze = RB_to_maze(w,beta,n,n)
+    rook_board = frozenset(maze_to_rook_board(maze))
+    return rook_board
+
+
+def query_from_colored_permutation(w, beta, show_maze=False):
+    """
+    Query the rook board (and optional maze) from a colored permutation (w, beta).
+    """
+    n = len(w)
+    if set(w) != set(range(1, n + 1)):
+        raise ValueError(f"w must be a permutation of 1..{n}")
+    if any(i < 1 or i > n for i in beta):
+        raise ValueError(f"beta must be a subset of 1..{n}")
+
+    rook_board = RB_to_R(w, beta)
+    sigma = beta_to_sigma(w, beta)
+    print(f"(w,beta) = {str_colored_partition(w, beta)}")
+    print(f"(w,sigma) = {str_colored_partition(w, sigma)}")
+    print(str_R(rook_board))
+
+    if show_maze:
+        maze = RB_to_maze(w, beta, n, n)
+        print(str_maze(maze))
+        print(str_maze_by_type(maze))
+
+    return rook_board
+
+
+
+def count_RB_to_rook_board_bijection(n, verbose=False, max_print=5):
+    """
+    Count sizes to show RB -> maze -> rook_board is bijective for size n.
+    Print the map RB --> maze --> rook_board.
+    Returns True if counts match and the map hits all rook boards.
+    """
+    if n <= 0:
+        raise ValueError("n must be a positive integer")
+
+    rook_from_rb = set()
+    rb_count = 0
+    for w in generate_permutations(n):
+        for beta in generate_all_beta(w):
+            rb_count += 1
+            maze = RB_to_maze(w, beta, n, n)
+            rook_from_rb.add(frozenset(maze_to_rook_board(maze)))
+            sigma = beta_to_sigma(w, beta)
+            print(f"(w,beta)={str_colored_partition(w, beta)} --> (w,sigma)={str_colored_partition(w, sigma)} --> rook_board\n{str_R(frozenset(maze_to_rook_board(maze)))}")
+            print(str_maze(maze))
+
+    rook_count = count_R(n, n)
+    image_count = len(rook_from_rb)
+
+    ok = (rb_count == rook_count == image_count)
+
+    if verbose or not ok:
+        print(f"RB elements count: {rb_count}")
+        print(f"Rook boards count: {rook_count}")
+        print(f"Image size (RB -> maze -> R): {image_count}")
+        print("Count check:", "PASS" if ok else "FAIL")
+        if not ok and max_print > 0:
+            missing = [rb for rb in generate_R(n, n) if frozenset(rb) not in rook_from_rb]
+            if missing:
+                print(f"Missing rook boards (showing up to {max_print}):")
+                for rb in missing[:max_print]:
+                    print(f"  {format_R(rb)}")
+
+    return ok
+
 
 if __name__ == "__main__":
-    import sys
-    
-    # Check if command line arguments are provided
-    if len(sys.argv) != 3:
-        print("Usage: python Maze.py <m> <n>")
-        print("  m: Size of the second set")
-        print("  n: Size of the first set")
-        sys.exit(1)
-    
-    try:
-        m = int(sys.argv[1])
-        n = int(sys.argv[2])
-        
-        if m <= 0 or n <= 0:
-            print("Error: Both m and n must be positive integers")
-            sys.exit(1)
-        
-    except ValueError:
-        print("Error: Both m and n must be valid integers")
-        sys.exit(1)
+    import argparse
 
-    print_all_R(m, n) 
+    def _parse_int_list(value):
+        value = value.strip()
+        if not value or value in {"[]", "()", "{}"}:
+            return []
+        if any(sep in value for sep in [",", " "]):
+            parts = [p for p in value.replace(",", " ").split(" ") if p]
+            return [int(p) for p in parts]
+        return [int(ch) for ch in value]
+
+    parser = argparse.ArgumentParser(
+        description="Rook boards, mazes, and queries from colored permutations."
+    )
+    parser.add_argument("-m", type=int, help="Size of the second set")
+    parser.add_argument("-n", type=int, help="Size of the first set")
+    parser.add_argument(
+        "--w",
+        type=str,
+        help="Permutation w as '2,1,3' or '213'.",
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "--beta",
+        type=str,
+        help="Beta positions as '1,3' or '13'.",
+    )
+    group.add_argument(
+        "--sigma",
+        type=str,
+        help="Sigma positions as '1,3' or '13'.",
+    )
+    parser.add_argument(
+        "--show-maze",
+        action="store_true",
+        help="Also print the maze representations.",
+    )
+    parser.add_argument(
+        "--check-bijection",
+        action="store_true",
+        help="Check RB -> maze -> rook_board bijection for size n.",
+    )
+    args = parser.parse_args()
+
+    if args.check_bijection:
+        if args.n is None:
+            parser.error("--check-bijection requires -n")
+        count_RB_to_rook_board_bijection(args.n, verbose=True)
+    elif args.w:
+        w = _parse_int_list(args.w)
+        if not w:
+            raise ValueError("w must be non-empty")
+        if args.beta:
+            beta = set(_parse_int_list(args.beta))
+            assert is_beta_on_subset(w, beta), f"beta={beta} is not a valid beta subset for w={w}"
+        elif args.sigma:
+            sigma = set(_parse_int_list(args.sigma))
+            assert is_decreasing_on_subset(w, sigma), f"sigma={sigma} is not a valid sigma subset for w={w}"
+            beta = sigma_to_beta(w, sigma)
+        else:
+            raise ValueError("Provide --beta or --sigma with --w")
+        query_from_colored_permutation(w, beta, show_maze=args.show_maze)
+    else:
+        if args.m is None or args.n is None:
+            parser.error("Provide -m and -n to list rook boards, or --w to query.")
+        if args.m <= 0 or args.n <= 0:
+            raise ValueError("m and n must be positive integers")
+        print_all_R(args.m, args.n)
