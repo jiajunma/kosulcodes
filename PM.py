@@ -111,6 +111,30 @@ def get_all_types_companions(pm, m, n):
         result['right'][i] = get_type_companion(pm, m, n, 'right', i)
     return result
 
+def ell_pm(pm,m,n):
+    """
+    Compute the dimension of the orbit of determined by a partial matching.
+    the dimension depends on (m,n)
+
+    The formula is: 
+    dim(O_pm) = sum_{(i,j)\in pm } (i + n - j) - sum_{(i,j),(i',j')\in pm, i < i', j < j'} 1
+    """
+    if not pm:
+        return 0
+
+    pairs = sorted(pm, key=lambda pair: pair[0])
+    dim_sum = sum(i + n - j for i, j in pairs)
+
+    increasing_pairs = 0
+    for idx in range(len(pairs)):
+        i1, j1 = pairs[idx]
+        for jdx in range(idx + 1, len(pairs)):
+            i2, j2 = pairs[jdx]
+            if j1 < j2:
+                increasing_pairs += 1
+
+    return dim_sum - increasing_pairs
+
 if __name__ == "__main__":
     # Example usage and verification
     m, n = 2, 2

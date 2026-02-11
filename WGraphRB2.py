@@ -5,6 +5,7 @@ from HeckeRB import HeckeRB, denormalize_key, normalize_key
 from RB import tilde_inverse_sigma, beta_to_sigma, sigma_to_beta, str_colored_partition
 import sympy as sp
 from Maze import  RB_to_R, str_R
+from PM import ell_pm
 
 class WGraph2:
     def __init__(self, n):
@@ -217,6 +218,7 @@ class WGraph2:
                 print(f"Error: Rook board {rook_board} already exists")
 
             label += f"<br/><font point-size='10'>{str_rook_board(rook_board)}</font>"
+            label += f"<br/><font point-size='10'>{ell_pm(rook_board, self.n, self.n)}</font>"
             
             cell_idx = v_to_cell.get(v_key, 0)
             color = colors[cell_idx % len(colors)]
