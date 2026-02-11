@@ -686,7 +686,7 @@ def maze_to_RB(maze):
             for i,j,t  in path:
                 if t == 'S':
                     res.add((i+1,j+1))
-                    beta.add(j+1)
+                    beta.add(i+1) # Here beta records the position
     for i in range(m):
         path = trace_wall(maze,i,n-1)
         if path and path[0][2] in ['H','N']:
@@ -846,8 +846,8 @@ def RB_to_maze(w,beta,m,n):
     w = matching_to_graph(w)
 
     # All blue positions
-    XNW = {(i,j) for i,j in w if j in beta}
-    XSE = {(i,j) for i,j in w if not j in beta}
+    XNW = {(i,j) for i,j in w if i in beta}
+    XSE = {(i,j) for i,j in w if not i in beta}
     while XNW:
         nw = compute_nw_envelope(XNW)
         # update grid
@@ -890,8 +890,11 @@ def print_all_R(m, n):
     print("-" * 80)
 
     maze_to_RB_test = 0
+    all_rook_boards = set()
+    all_RB = set()
     
     for rook_board in generate_R(m, n):
+        all_rook_boards.add(frozenset(rook_board))
         count += 1
         maze = generate_maze(m, n, rook_board)
         strblocks = []
@@ -904,9 +907,11 @@ def print_all_R(m, n):
         print(f"{count}. {format_R(rook_board)} --> {format_R(fourier)}")
         print(concat_str_blocks_list(strblocks))
 
+
         # if m=n, test Maze to RB and RB to Maze
         if m == n:
             w,beta = maze_to_RB(maze)
+            all_RB.add(normalize_key(w,frozenset(beta)))
             sigma = beta_to_sigma(w,beta)
             maze2 = RB_to_maze(w,beta,m,n)
             rook_board2 = RB_to_R(w,beta)
@@ -931,6 +936,10 @@ def print_all_R(m, n):
         print(f"✓ Count verification: PASSED ({count} == {expected_count})")
     else:
         print(f"✗ Count verification: FAILED ({count} != {expected_count})")
+    if len(all_rook_boards) != len(all_RB):
+        print(f"✗ All rook boards: {len(all_rook_boards)} != {len(all_RB)}")
+    else:
+        print(f"✓ All rook boards = All RB: {len(all_rook_boards)} == {len(all_RB)}")
 
     if maze_to_RB_test > 0:
         print(f"✗ maze_to_RB test: FAILED ({maze_to_RB_test} cases)")
@@ -961,6 +970,7 @@ def RB_to_R(w,beta):
     This is [FGT Lemma 4.2.7]: RB --> maze --> R
     """
     n = len(w)
+    assert is_beta_on_subset(w, beta), f"beta={beta} is not a valid beta subset for w={w}"
     maze = RB_to_maze(w,beta,n,n)
     rook_board = frozenset(maze_to_rook_board(maze))
     return rook_board
