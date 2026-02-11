@@ -1,4 +1,6 @@
 import itertools
+import argparse
+from math import comb, factorial
 
 def generate_all_pm(m, n):
     """
@@ -12,6 +14,46 @@ def generate_all_pm(m, n):
                 for p in itertools.permutations(J):
                     pms.append(frozenset(zip(I, p)))
     return pms
+
+
+def special_sigma_i(m, n, i):
+    """
+    Special basic element sigma_i in PM(m,n):
+      I = {m-i+1, ..., m}, J = {1, ..., i},
+    with the unique order-preserving bijection I -> J.
+    """
+    if i < 0 or i > min(m, n):
+        raise ValueError(f"Require 0 <= i <= min(m,n), got i={i}, m={m}, n={n}")
+    if i == 0:
+        return frozenset()
+    I = list(range(m - i + 1, m + 1))
+    J = list(range(1, i + 1))
+    return frozenset(zip(I, J))
+
+
+def all_special_sigmas(m, n):
+    """
+    Return [sigma_0, sigma_1, ..., sigma_{min(m,n)}].
+    """
+    return [special_sigma_i(m, n, i) for i in range(0, min(m, n) + 1)]
+
+
+def count_pm(m, n):
+    """
+    Count |PM(m,n)| by explicit enumeration.
+    """
+    return len(generate_all_pm(m, n))
+
+
+def count_pm_formula(m, n):
+    """
+    Count |PM(m,n)| via:
+      sum_{k=0}^{min(m,n)} C(m,k) C(n,k) k!
+    """
+    total = 0
+    for k in range(0, min(m, n) + 1):
+        total += comb(m, k) * comb(n, k) * factorial(k)
+    return total
 
 
 def is_partial_matching(pm):
@@ -100,15 +142,16 @@ def get_type_companion(pm, side, i):
     
     else:
         raise ValueError("side must be 'left' or 'right'")
+
 def get_all_types_companions(pm, m, n):
     """
     Get all types and companions for all simple reflections s_i and s_i'.
     """
     result = {'left': {}, 'right': {}}
     for i in range(1, m):
-        result['left'][i] = get_type_companion(pm, m, n, 'left', i)
+        result['left'][i] = get_type_companion(pm, 'left', i)
     for i in range(1, n):
-        result['right'][i] = get_type_companion(pm, m, n, 'right', i)
+        result['right'][i] = get_type_companion(pm, 'right', i)
     return result
 
 def ell_pm(pm,m,n):
@@ -127,22 +170,57 @@ def ell_pm(pm,m,n):
 
     increasing_pairs = 0
     for idx in range(len(pairs)):
-        i1, j1 = pairs[idx]
+        _, j1 = pairs[idx]
         for jdx in range(idx + 1, len(pairs)):
-            i2, j2 = pairs[jdx]
+            _, j2 = pairs[jdx]
             if j1 < j2:
                 increasing_pairs += 1
 
     return dim_sum - increasing_pairs
 
+
+
 if __name__ == "__main__":
-    # Example usage and verification
-    m, n = 2, 2
+    parser = argparse.ArgumentParser(
+        description="Enumerate PM(m,n) and print type+companion data."
+    )
+    parser.add_argument("m", type=int, nargs="?", default=2)
+    parser.add_argument("n", type=int, nargs="?", default=2)
+    parser.add_argument(
+        "--count-only",
+        action="store_true",
+        help="Only print |PM(m,n)| from formula and enumeration.",
+    )
+    parser.add_argument(
+        "--special-basic",
+        action="store_true",
+        help="Print only special basic elements sigma_i (i=0..min(m,n)).",
+    )
+    args = parser.parse_args()
+
+    m, n = args.m, args.n
+    if m < 0 or n < 0:
+        raise ValueError(f"Require m,n >= 0, got m={m}, n={n}")
+
+    enum_count = count_pm(m, n)
+    formula_count = count_pm_formula(m, n)
+    print(f"|PM({m},{n})| by enumeration: {enum_count}")
+    print(f"|PM({m},{n})| by formula:     {formula_count}")
+
+    if args.count_only:
+        raise SystemExit(0)
+    if args.special_basic:
+        sigmas = all_special_sigmas(m, n)
+        print(f"Special basic elements count: {len(sigmas)}")
+        for i, sigma in enumerate(sigmas):
+            print(f"sigma_{i} = {sigma}")
+        raise SystemExit(0)
+
     pms = generate_all_pm(m, n)
-    print(f"Total partial matchings for m={m}, n={n}: {len(pms)}")
     for pm in pms:
         print(f"\nPM: {pm}")
         info = get_all_types_companions(pm, m, n)
         for side in ['left', 'right']:
             for i, res in info[side].items():
-                print(f"  {side} s_{i}: type {res['type']}, companion {res['companion']}")
+                typ, companions = res
+                print(f"  {side} s_{i}: type {typ}, companions {companions}")
