@@ -1001,46 +1001,6 @@ def query_from_colored_permutation(w, beta, show_maze=False):
 
 
 
-def count_RB_to_rook_board_bijection(n, verbose=False, max_print=5):
-    """
-    Count sizes to show RB -> maze -> rook_board is bijective for size n.
-    Print the map RB --> maze --> rook_board.
-    Returns True if counts match and the map hits all rook boards.
-    """
-    if n <= 0:
-        raise ValueError("n must be a positive integer")
-
-    rook_from_rb = set()
-    rb_count = 0
-    for w in generate_permutations(n):
-        for beta in generate_all_beta(w):
-            rb_count += 1
-            maze = RB_to_maze(w, beta, n, n)
-            rook_from_rb.add(frozenset(maze_to_rook_board(maze)))
-            sigma = beta_to_sigma(w, beta)
-            print(f"(w,beta)={str_colored_partition(w, beta)} --> (w,sigma)={str_colored_partition(w, sigma)} --> rook_board\n{str_R(frozenset(maze_to_rook_board(maze)))}")
-            print(str_maze(maze))
-
-    rook_count = count_R(n, n)
-    image_count = len(rook_from_rb)
-
-    ok = (rb_count == rook_count == image_count)
-
-    if verbose or not ok:
-        print(f"RB elements count: {rb_count}")
-        print(f"Rook boards count: {rook_count}")
-        print(f"Image size (RB -> maze -> R): {image_count}")
-        print("Count check:", "PASS" if ok else "FAIL")
-        if not ok and max_print > 0:
-            missing = [rb for rb in generate_R(n, n) if frozenset(rb) not in rook_from_rb]
-            if missing:
-                print(f"Missing rook boards (showing up to {max_print}):")
-                for rb in missing[:max_print]:
-                    print(f"  {format_R(rb)}")
-
-    return ok
-
-
 if __name__ == "__main__":
     import argparse
 
@@ -1089,6 +1049,7 @@ if __name__ == "__main__":
     if args.check_bijection:
         if args.n is None:
             parser.error("--check-bijection requires -n")
+        from matching_tau import count_RB_to_rook_board_bijection
         count_RB_to_rook_board_bijection(args.n, verbose=True)
     elif args.w:
         w = _parse_int_list(args.w)
