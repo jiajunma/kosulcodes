@@ -580,23 +580,32 @@ def reverse_pair(rook_board):
     """
     return {(j, i) for i, j in rook_board}
 
-def Fourier(rook_board,m,n):
+def _fourier_base(rook_board, m, n):
     """
-    Apply the Fourier transform to a rook board.
-    
-    Args:
-        rook_board: A set of tuples (i, j) representing a rook board
-        m: Size of the second set (j in range [1, m])
-        n: Size of the first set (i in range [1, n])
-    
-    Returns:
-        A new set of tuples representing the Fourier transform of the rook board
+    Base Fourier transform on rook boards used inside our convention.
     """
     maze = generate_maze(m, n, rook_board)
     invmaze = maze_involution(maze)
     res = maze_to_rook_board(invmaze)
     res = reverse_pair(res)
     return res
+
+
+def _reverse_columns(rook_board, n):
+    """Apply the unique order-reversing map on columns: j -> n+1-j."""
+    return {(i, n + 1 - j) for i, j in rook_board}
+
+
+def Fourier(rook_board, m, n):
+    """
+    Fourier transform in our convention:
+      Fourier = r_n o F_base o r_n,
+    where r_n is the unique order-reversing map on [1..n].
+    """
+    pm1 = _reverse_columns(rook_board, n)
+    pm2 = _fourier_base(pm1, m, n)
+    pm3 = _reverse_columns(pm2, n)
+    return pm3
 
 
 def size_of_maze(maze):

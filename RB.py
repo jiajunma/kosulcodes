@@ -200,6 +200,16 @@ def str_colored_partition(w, I):
     return f"({', '.join(result)})"
 
 
+def generate_all_w_beta_pairs(n):
+    """
+    Generate all (w, beta) pairs where w is a permutation of 1..n
+    and beta satisfies the RB beta condition.
+    """
+    for w in generate_permutations(n):
+        for beta in generate_all_beta(w):
+            yield (w, beta)
+
+
 def generate_all_w_sigma_pairs(n):
     """
     Generate all (w, sigma) pairs where w is a permutation of 1 to n
@@ -214,6 +224,306 @@ def generate_all_w_sigma_pairs(n):
     for w in generate_permutations(n):
         for sigma in generate_all_sigma(w):
             yield (w, sigma)
+
+
+def has_strictly_decreasing_tail(w, m, n=None):
+    """
+    Check w(m+1) > w(m+2) > ... > w(n) for 0 <= m <= n <= len(w).
+    When m == n, this condition is vacuously true.
+    """
+    if n is None:
+        n = len(w)
+    if not (0 <= m <= n <= len(w)):
+        return False
+    return all(w[i - 1] > w[i] for i in range(m + 1, n))
+
+
+def has_strictly_decreasing_inverse_tail(w, m, n=None):
+    """
+    Check w^{-1}(m+1) > w^{-1}(m+2) > ... > w^{-1}(n)
+    for 0 <= m <= n <= len(w).
+    When m == n, this condition is vacuously true.
+    """
+    if n is None:
+        n = len(w)
+    if not (0 <= m <= n <= len(w)):
+        return False
+    w_inv = inverse_permutation(w)
+    return all(w_inv[i - 1] > w_inv[i] for i in range(m + 1, n))
+
+
+def image_of_subset(w, subset):
+    """
+    Return w(subset) = {w(i) | i in subset}, for 1-indexed subset.
+    """
+    return {w[i - 1] for i in subset}
+
+
+def is_in_RB_mn_beta(w, beta, m, n=None):
+    """
+    Definition 5.1 (1):
+      RB_{m,n} = {(w,beta) in RB_n |
+                  w(beta) ∩ {m+1,...,n} = {m+1},
+                  w^{-1}(m+1) > ... > w^{-1}(n)}.
+    """
+    if n is None:
+        n = len(w)
+    if not (0 <= m < n <= len(w)):
+        return False
+    tail = set(range(m + 1, n + 1))
+    beta_set = set(beta)
+    beta_img = image_of_subset(w, beta_set)
+    return (
+        is_beta_on_subset(w, beta_set)
+        and (beta_img & tail) == {m + 1}
+        and has_strictly_decreasing_inverse_tail(w, m, n)
+    )
+
+
+def is_in_RBprime_mn_sigma(w, sigma, m, n=None):
+    """
+    Definition 5.1 (2):
+      RB'_{m,n} = {(w,sigma) in RB'_n |
+                   w(beta) ∩ {m+1,...,n} = {m+1},
+                   w^{-1}(m+1) > ... > w^{-1}(n)},
+      where beta = sigma_to_beta(w, sigma).
+    """
+    if n is None:
+        n = len(w)
+    if not (0 <= m < n <= len(w)):
+        return False
+    tail = set(range(m + 1, n + 1))
+    sigma_set = set(sigma)
+    beta_set = sigma_to_beta(w, sigma_set)
+    beta_img = image_of_subset(w, beta_set)
+    return (
+        is_decreasing_on_subset(w, sigma_set)
+        and (beta_img & tail) == {m + 1}
+        and has_strictly_decreasing_inverse_tail(w, m, n)
+    )
+
+
+def generate_RB_mn_beta_pairs(m, n):
+    """
+    Enumerate RB_{m,n} as (w, beta) pairs.
+    """
+    for w, beta in generate_all_w_beta_pairs(n):
+        if is_in_RB_mn_beta(w, beta, m, n):
+            yield (w, beta)
+
+
+def generate_RBprime_mn_sigma_pairs(m, n):
+    """
+    Enumerate RB'_{m,n} as (w, sigma) pairs.
+    """
+    for w, sigma in generate_all_w_sigma_pairs(n):
+        if is_in_RBprime_mn_sigma(w, sigma, m, n):
+            yield (w, sigma)
+
+
+def count_RB_mn_beta_pairs(m, n):
+    """
+    Count |RB_{m,n}| in beta-notation.
+    """
+    return sum(1 for _ in generate_RB_mn_beta_pairs(m, n))
+
+
+def count_RBprime_mn_sigma_pairs(m, n):
+    """
+    Count |RB'_{m,n}| in sigma-notation.
+    """
+    return sum(1 for _ in generate_RBprime_mn_sigma_pairs(m, n))
+
+
+def is_in_RBdiamond_mn_beta(w, beta, m, n=None):
+    """
+    Definition 5.2 (1), beta-notation:
+      RB^◇_{m,n} = {(w,beta) in RB_n |
+                    {m+1,...,n} ⊆ w(beta)\\{m+1},
+                    w^{-1}(m+1) > ... > w^{-1}(n)}.
+    """
+    if n is None:
+        n = len(w)
+    if not (0 <= m <= n <= len(w)):
+        return False
+    beta_set = set(beta)
+    beta_img = image_of_subset(w, beta_set)
+    tail = set(range(m + 1, n + 1))
+    return (
+        is_beta_on_subset(w, beta_set)
+        and tail.issubset(beta_img.difference({m + 1}))
+        and has_strictly_decreasing_inverse_tail(w, m, n)
+    )
+
+
+def is_in_RBprime_diamond_mn_sigma(w, sigma, m, n=None):
+    """
+    Definition 5.2 (2), sigma-notation:
+      RB'^◇_{m,n} = {(w,sigma) in RB'_n |
+                     {m+1,...,n} ⊆ w(beta),
+                     w^{-1}(m+1) > ... > w^{-1}(n)},
+      where beta = sigma_to_beta(w, sigma).
+    """
+    if n is None:
+        n = len(w)
+    if not (0 <= m <= n <= len(w)):
+        return False
+    sigma_set = set(sigma)
+    beta_set = sigma_to_beta(w, sigma_set)
+    beta_img = image_of_subset(w, beta_set)
+    tail = set(range(m + 1, n + 1))
+    return (
+        is_decreasing_on_subset(w, sigma_set)
+        and tail.issubset(beta_img)
+        and has_strictly_decreasing_inverse_tail(w, m, n)
+    )
+
+
+def generate_RBdiamond_mn_beta_pairs(m, n):
+    """
+    Enumerate RB^◇_{m,n} in beta-notation.
+    """
+    for w, beta in generate_all_w_beta_pairs(n):
+        if is_in_RBdiamond_mn_beta(w, beta, m, n):
+            yield (w, beta)
+
+
+def generate_RBprime_diamond_mn_sigma_pairs(m, n):
+    """
+    Enumerate RB'^◇_{m,n} in sigma-notation.
+    """
+    for w, sigma in generate_all_w_sigma_pairs(n):
+        if is_in_RBprime_diamond_mn_sigma(w, sigma, m, n):
+            yield (w, sigma)
+
+
+def count_RBdiamond_mn_beta_pairs(m, n):
+    """
+    Count |RB^◇_{m,n}| in beta-notation.
+    """
+    return sum(1 for _ in generate_RBdiamond_mn_beta_pairs(m, n))
+
+
+def count_RBprime_diamond_mn_sigma_pairs(m, n):
+    """
+    Count |RB'^◇_{m,n}| in sigma-notation.
+    """
+    return sum(1 for _ in generate_RBprime_diamond_mn_sigma_pairs(m, n))
+
+
+def is_in_RBn_sup_m_beta(w, beta, m, n=None):
+    """
+    Definition 5.1 (QGP-style), beta-notation:
+      RB_n^m = {(w,beta) in RB_n |
+                w(beta) ∩ {m+1,...,n} = {m+1}}.
+    """
+    if n is None:
+        n = len(w)
+    if not (0 <= m < n <= len(w)):
+        return False
+    beta_set = set(beta)
+    beta_img = image_of_subset(w, beta_set)
+    tail = set(range(m + 1, n + 1))
+    return is_beta_on_subset(w, beta_set) and (beta_img & tail) == {m + 1}
+
+
+def is_in_RBprime_n_sup_m_sigma(w, sigma, m, n=None):
+    """
+    Definition 5.1 (QGP-style), sigma/alpha-notation:
+      RB_n'^m = {(w,alpha) in RB'_n |
+                 w(alpha) ∩ {m+1,...,n} = {m+1}}.
+    """
+    if n is None:
+        n = len(w)
+    if not (0 <= m < n <= len(w)):
+        return False
+    sigma_set = set(sigma)
+    sigma_img = image_of_subset(w, sigma_set)
+    tail = set(range(m + 1, n + 1))
+    return is_decreasing_on_subset(w, sigma_set) and (sigma_img & tail) == {m + 1}
+
+
+def generate_RBn_sup_m_beta_pairs(m, n):
+    """
+    Enumerate RB_n^m in beta-notation.
+    """
+    for w, beta in generate_all_w_beta_pairs(n):
+        if is_in_RBn_sup_m_beta(w, beta, m, n):
+            yield (w, beta)
+
+
+def generate_RBprime_n_sup_m_sigma_pairs(m, n):
+    """
+    Enumerate RB_n'^m in sigma-notation.
+    """
+    for w, sigma in generate_all_w_sigma_pairs(n):
+        if is_in_RBprime_n_sup_m_sigma(w, sigma, m, n):
+            yield (w, sigma)
+
+
+def count_RBn_sup_m_beta_pairs(m, n):
+    """
+    Count |RB_n^m| in beta-notation.
+    """
+    return sum(1 for _ in generate_RBn_sup_m_beta_pairs(m, n))
+
+
+def count_RBprime_n_sup_m_sigma_pairs(m, n):
+    """
+    Count |RB_n'^m| in sigma-notation.
+    """
+    return sum(1 for _ in generate_RBprime_n_sup_m_sigma_pairs(m, n))
+
+
+def normalize_tail_to_inverse_order(w, m, n=None):
+    """
+    Keep the occupied positions of values {m+1,...,n} fixed, and uniquely
+    reorder those values so that:
+      w^{-1}(m+1) > w^{-1}(m+2) > ... > w^{-1}(n).
+
+    Equivalently, if p1 < p2 < ... are the occupied positions of tail values,
+    assign n, n-1, ... to p1, p2, ...
+    """
+    if n is None:
+        n = len(w)
+    if not (0 <= m <= n <= len(w)):
+        raise ValueError(f"Require 0 <= m <= n <= len(w), got m={m}, n={n}, len={len(w)}")
+    if m == n:
+        return tuple(w)
+
+    tail_values = set(range(m + 1, n + 1))
+    occupied_positions = sorted(i for i in range(1, n + 1) if w[i - 1] in tail_values)
+    w_new = list(w)
+    for pos, val in zip(occupied_positions, range(n, m, -1)):
+        w_new[pos - 1] = val
+    return tuple(w_new)
+
+
+def map_RBprime_n_sup_m_to_RBprime_mn(
+    w, sigma, m, n=None, preserve_value_colors=True
+):
+    """
+    Map candidate from RB_n'^m to RB'_{m,n} by normalizing tail values
+    to inverse order while keeping their occupied positions fixed.
+
+    Default mode preserves color-by-value:
+      red_values = w(sigma), and sigma' is chosen so that w'(sigma') = red_values.
+
+    If preserve_value_colors=False, use beta-transport:
+      beta = sigma_to_beta(w, sigma),
+      sigma' = beta_to_sigma(w', beta).
+    """
+    if n is None:
+        n = len(w)
+    w_new = normalize_tail_to_inverse_order(w, m, n=n)
+    sigma_set = set(sigma)
+    if preserve_value_colors:
+        red_values = image_of_subset(w, sigma_set)
+        sigma_new = {i for i, val in enumerate(w_new, start=1) if val in red_values}
+    else:
+        beta = sigma_to_beta(w, sigma_set)
+        sigma_new = beta_to_sigma(w_new, beta)
+    return w_new, sigma_new
 
 
 def sigma_to_beta(w, sigma):
@@ -322,22 +632,89 @@ def right_action_rb(wtilde, x):
 
 def root_type_right(w, sigma):
     """
-    Determine the root type for each simple reflection s_i for the right action
-    using the anti-involution tau: (w, sigma) -> (w^{-1}, w(sigma)).
+    Determine right-action root types and companions directly from the
+    (w, sigma) formulas (without reducing to left action first).
+
+    This implementation is compatible with the anti-involution construction
+    (verified by verify_right_formula.py).
     """
     n = len(w)
+    sigma_set = set(sigma)
+    l_w = length_of_permutation(w)
     result = [None] * (n + 1)
-    result[0] = length_of_permutation(w) + len(sigma_to_beta(w, sigma))
+    result[0] = l_w + len(sigma_to_beta(w, sigma_set))
 
-    w_tau, sigma_tau = anti_involution_sigma(w, sigma, validate=True)
-    left_types = root_type_left(w_tau, sigma_tau)
+    def s_action_on_sigma(alpha, i):
+        swapped = set()
+        for j in alpha:
+            if j == i:
+                swapped.add(i + 1)
+            elif j == i + 1:
+                swapped.add(i)
+            else:
+                swapped.add(j)
+        return swapped
 
     for i in range(1, n):
-        T, comps = left_types[i]
-        C = []
-        for ww, ss in comps:
-            ww_inv, ss_img = anti_involution_sigma(ww, ss, validate=True)
-            C.append(normalize_key_sigma(ww_inv, ss_img))
+        s_i = transposition(i, i + 1, n)
+        ws = permutation_prod(w, s_i)
+        l_ws = length_of_permutation(ws)
+        inter = sigma_set & {i, i + 1}
+        sigma_swapped = s_action_on_sigma(sigma_set, i)
+        w_i = w[i - 1]
+        w_ip1 = w[i]
+
+        C = [normalize_key_sigma(w, sigma_set)]
+        T = ""
+
+        def exists_between(low, high):
+            for j in sigma_set:
+                if j <= i + 1:
+                    continue
+                w_j = w[j - 1]
+                if low < w_j < high:
+                    return True
+            return False
+
+        if l_ws > l_w:
+            if inter == {i} or not inter:
+                T = "U-"
+                C.append(normalize_key_sigma(ws, sigma_swapped))
+            elif inter == {i + 1}:
+                if exists_between(w_i, w_ip1):
+                    T = "U-"
+                    C.append(normalize_key_sigma(ws, sigma_swapped))
+                else:
+                    T = "T-"
+                    C.append(normalize_key_sigma(ws, sigma_swapped))
+                    C.append(normalize_key_sigma(ws, sigma_swapped | {i + 1}))
+            else:
+                raise ValueError(
+                    f"Unhandled case for i={i}, inter={inter}, l(ws)>l(w)"
+                )
+        elif l_ws < l_w:
+            if inter == {i + 1} or not inter:
+                T = "U+"
+                C.append(normalize_key_sigma(ws, sigma_swapped))
+            elif inter == {i}:
+                if exists_between(w_ip1, w_i):
+                    T = "U+"
+                    C.append(normalize_key_sigma(ws, sigma_swapped))
+                else:
+                    T = "T-"
+                    C.append(normalize_key_sigma(ws, sigma_swapped))
+                    C.append(normalize_key_sigma(w, sigma_set | {i + 1}))
+            elif inter == {i, i + 1}:
+                T = "T+"
+                C.append(normalize_key_sigma(w, sigma_set - {i + 1}))
+                C.append(normalize_key_sigma(ws, sigma_swapped - {i}))
+            else:
+                raise ValueError(
+                    f"Unhandled case for i={i}, inter={inter}, l(ws)<l(w)"
+                )
+        else:
+            raise ValueError("Unexpected length equality")
+
         result[i] = (T, C)
 
     return result
